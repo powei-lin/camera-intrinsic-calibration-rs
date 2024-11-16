@@ -1,23 +1,37 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::board;
-use crate::detected_points::FeaturePoint;
+use crate::detected_points::{FeaturePoint, FrameFeature};
 use aprilgrid::detector::TagDetector;
 use glam::Vec2;
 use glob::glob;
 use image::ImageReader;
 use rayon::prelude::*;
 
+fn path_to_timestamp(path: &PathBuf) -> i64 {
+    let time_ns: i64 = path
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap_or(0);
+    time_ns
+}
+
 pub fn load_euroc(
     root_folder: &str,
     tag_detector: &TagDetector,
     board: &board::Board,
-) -> Vec<HashMap<u32, FeaturePoint>> {
+) -> Vec<FrameFeature> {
     let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
     img_paths
         .par_bridge()
         .map(|path| {
-            let img = ImageReader::open(path.unwrap()).unwrap().decode().unwrap();
+            let path = path.unwrap();
+            let time_ns = path_to_timestamp(&path);
+            let img = ImageReader::open(&path).unwrap().decode().unwrap();
             let detected_tag = tag_detector.detect(&img);
             let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
                 .iter()
@@ -36,7 +50,10 @@ pub fn load_euroc(
                         .collect::<Vec<_>>()
                 })
                 .collect();
-            tags_expand_ids
+            FrameFeature {
+                time_ns,
+                features: tags_expand_ids,
+            }
         })
         .collect()
 }
