@@ -1,0 +1,9 @@
+[package]
+name = "camera-intrinsic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aprilgrid = "0.3.3"
+glam = "0.29.2"
+glob = "0.3.1"
