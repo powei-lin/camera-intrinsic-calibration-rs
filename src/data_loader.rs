@@ -47,7 +47,7 @@ pub fn load_euroc(
                         .enumerate()
                         .filter_map(|(i, p)| {
                             let id = k * 4 + i as u32;
-                            if let Some(p3d) = board.id_to_3d.get(k) {
+                            if let Some(p3d) = board.id_to_3d.get(&id) {
                                 let p2d = Vec2::new(p.0, p.1);
                                 Some((id, FeaturePoint { p2d, p3d: *p3d }))
                             } else {

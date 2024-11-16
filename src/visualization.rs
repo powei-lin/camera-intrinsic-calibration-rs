@@ -11,7 +11,10 @@ pub fn log_image_as_compressed(
     format: image::ImageFormat,
 ) {
     let mut bytes: Vec<u8> = Vec::new();
-    img.write_to(&mut Cursor::new(&mut bytes), format).unwrap();
+
+    img.to_luma8()
+        .write_to(&mut Cursor::new(&mut bytes), format)
+        .unwrap();
 
     recording
         .log(
