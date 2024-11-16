@@ -56,3 +56,7 @@ impl Board {
         Board { id_to_3d }
     }
 }
+
+pub fn create_default_6x6_board() -> Board {
+    Board::init_aprilgrid(0.088, 0.3, 6, 6)
+}
