@@ -1,15 +1,16 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::board;
 use crate::detected_points::{FeaturePoint, FrameFeature};
+use crate::visualization::log_image_as_compressed;
 use aprilgrid::detector::TagDetector;
 use glam::Vec2;
 use glob::glob;
 use image::ImageReader;
 use rayon::prelude::*;
 
-fn path_to_timestamp(path: &PathBuf) -> i64 {
+fn path_to_timestamp(path: &Path) -> i64 {
     let time_ns: i64 = path
         .file_stem()
         .unwrap()
@@ -24,14 +25,20 @@ pub fn load_euroc(
     root_folder: &str,
     tag_detector: &TagDetector,
     board: &board::Board,
+    recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<FrameFeature> {
     let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
+
     img_paths
         .par_bridge()
         .map(|path| {
             let path = path.unwrap();
             let time_ns = path_to_timestamp(&path);
             let img = ImageReader::open(&path).unwrap().decode().unwrap();
+            if let Some(recording) = recording_option {
+                recording.set_time_nanos("stable", time_ns);
+                log_image_as_compressed(recording, "/cam0", &img, image::ImageFormat::Jpeg);
+            };
             let detected_tag = tag_detector.detect(&img);
             let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
                 .iter()
