@@ -1,7 +1,6 @@
 use super::generic::CameraModel;
 use nalgebra as na;
 use num_traits::FromPrimitive;
-use rayon::prelude::*;
 
 pub struct OpenCVFisheye<T: na::RealField + Clone> {
     pub fx: T,
@@ -16,21 +15,16 @@ pub struct OpenCVFisheye<T: na::RealField + Clone> {
     pub height: u32,
 }
 impl<T: na::RealField + Clone> OpenCVFisheye<T> {
-    pub fn new(
-        camera_matrix: &na::Matrix3<T>,
-        distortion: &na::DMatrix<T>,
-        width: u32,
-        height: u32,
-    ) -> OpenCVFisheye<T> {
+    pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> OpenCVFisheye<T> {
         OpenCVFisheye {
-            fx: camera_matrix[(0, 0)].clone(),
-            fy: camera_matrix[(1, 1)].clone(),
-            cx: camera_matrix[(0, 2)].clone(),
-            cy: camera_matrix[(1, 2)].clone(),
-            k1: distortion[0].clone(),
-            k2: distortion[1].clone(),
-            k3: distortion[2].clone(),
-            k4: distortion[3].clone(),
+            fx: params[0].clone(),
+            fy: params[1].clone(),
+            cx: params[2].clone(),
+            cy: params[3].clone(),
+            k1: params[4].clone(),
+            k2: params[5].clone(),
+            k3: params[6].clone(),
+            k4: params[7].clone(),
             width,
             height,
         }

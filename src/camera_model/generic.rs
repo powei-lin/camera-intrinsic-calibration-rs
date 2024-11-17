@@ -1,4 +1,4 @@
-use image::{DynamicImage, GenericImage};
+use image::{DynamicImage, GenericImage, GenericImageView};
 use nalgebra as na;
 use rayon::prelude::*;
 
@@ -72,7 +72,7 @@ where
     }
 }
 
-fn init_undistort_map(
+pub fn init_undistort_map(
     camera_model: Box<&dyn CameraModel<f64>>,
     projection_mat: &na::Matrix3<f64>,
     new_h_w: (u32, u32),
