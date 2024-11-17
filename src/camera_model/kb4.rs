@@ -1,6 +1,7 @@
 use super::generic::CameraModel;
 use nalgebra as na;
 use rayon::prelude::*;
+use std::ops::Add;
 
 pub struct OpenCVFisheye {
     pub fx: f64,
@@ -51,10 +52,45 @@ impl OpenCVFisheye {
             + 7.0 * self.k3 * theta6
             + 9.0 * self.k4 * theta8
     }
+    fn project_one<T: na::RealField + Clone>(
+        params: &na::DVector<T>,
+        pt: &na::Vector3<T>,
+    ) -> Option<na::Vector2<T>> {
+        // let a = params[0] + params[1].clone();
+        // let b = a.clone() * a.clone();
+        let xn = pt[0].clone() / pt[2].clone();
+        let yn = pt[1].clone() / pt[2].clone();
+        xn.sin();
+        // let r2 = xn * xn + yn * yn;
+        // let r = r2.sqrt();
+        // let theta = r.atan();
+        // let theta_d = self.f(theta);
+        // let d = theta_d / r;
+        // let px = self.fx * (xn * d) + self.cx;
+        // let py = self.fy * (yn * d) + self.cy;
+        // if px < 0.0 || px > self.width as f64 || py < 0.0 || py > self.height as f64 {
+        //     None
+        // } else {
+        //     Some((px as f32, py as f32))
+        // }
+        // na::dvector![na::Vector2::new(a.clone(), a)]
+        None
+    }
 }
+// num_dual::DualDVec64
 
 impl CameraModel for OpenCVFisheye {
     fn project(&self, p3d: &[nalgebra::Point3<f64>]) -> Vec<Option<(f32, f32)>> {
+        let param = na::dvector![3.0];
+        let p3d0 = na::Vector3::new(1.0, 2.0, 3.0);
+        // let param = na::dvector![num_dual::DualDVec64::from_re(0.0)];
+        // let p3d0 = na::Vector3::new(
+        //     num_dual::DualDVec64::from_re(0.0),
+        //     num_dual::DualDVec64::from_re(0.0),
+        //     num_dual::DualDVec64::from_re(0.0),
+        // );
+
+        Self::project_one(&param, &p3d0);
         p3d.par_iter()
             .map(|pt| {
                 let xn = pt.x / pt.z;
