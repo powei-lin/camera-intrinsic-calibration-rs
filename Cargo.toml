@@ -16,3 +16,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rerun = "0.17.0"
 tiny-solver = "0.8.0"
+
+[[example]]
+name = "remap"
+path = "examples/remap.rs"
