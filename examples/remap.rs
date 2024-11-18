@@ -8,7 +8,7 @@ fn main() {
         .unwrap()
         .decode()
         .unwrap();
-    let img = image::DynamicImage::ImageLuma8(img.to_luma8());
+    // let img = image::DynamicImage::ImageLuma8(img.to_luma8());
     let params = na::dvector![
         190.89618687183938,
         190.87022285882367,

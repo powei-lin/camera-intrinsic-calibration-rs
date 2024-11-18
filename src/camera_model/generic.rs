@@ -1,39 +1,43 @@
-use image::{DynamicImage, GenericImage, GenericImageView};
+use image::DynamicImage;
 use nalgebra as na;
 use rayon::prelude::*;
 
-pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32>) -> DynamicImage {
-    let (r, c) = map0.shape();
-    let out = match src {
-        DynamicImage::ImageLuma8(img) => {
-            let out_img = image::GrayImage::from_par_fn(c as u32, r as u32, |x, y| {
-                let idx = y as usize * c + x as usize;
-                let (x_cor, y_cor) = unsafe { (map0.get_unchecked(idx), map1.get_unchecked(idx)) };
-                if x_cor.is_nan() || y_cor.is_nan() {
-                    return image::Luma([0]);
+macro_rules! remap_impl {
+    ($reg:expr, $map0:expr, $map1:expr, $($img_type0:ident => ($inner_type:ident, $default_value:expr)),*) => {
+        match $reg {
+            $(
+                DynamicImage::$img_type0(img) => {
+                    let (r, c) = $map0.shape();
+                    let out_img = image::ImageBuffer::from_par_fn(c as u32, r as u32, |x, y| {
+                        let idx = y as usize * c + x as usize;
+                        let (x_cor, y_cor) = unsafe { ($map0.get_unchecked(idx), $map1.get_unchecked(idx)) };
+                        if x_cor.is_nan() || y_cor.is_nan() {
+                            return image::$inner_type($default_value);
+                        }
+                        image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
+                            .unwrap_or(image::$inner_type($default_value))
+                    });
+                    DynamicImage::$img_type0(out_img)
                 }
-                image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
-                    .unwrap_or(image::Luma([0]))
-            });
-            DynamicImage::ImageLuma8(out_img)
-        }
-        DynamicImage::ImageRgb8(img) => {
-            let out_img = image::RgbImage::from_par_fn(c as u32, r as u32, |x, y| {
-                let idx = y as usize * c + x as usize;
-                let (x_cor, y_cor) = unsafe { (map0.get_unchecked(idx), map1.get_unchecked(idx)) };
-                if x_cor.is_nan() || y_cor.is_nan() {
-                    return image::Rgb([0, 0, 0]);
-                }
-                image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
-                    .unwrap_or(image::Rgb([0, 0, 0]))
-            });
-            DynamicImage::ImageRgb8(out_img)
-        }
-        _ => {
-            panic!("remap only supports gray8 and rgb8");
+            )*
+            _ => {
+                panic!("remap only supports gray8 and rgb8");
+            }
         }
     };
-    out
+}
+
+pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32>) -> DynamicImage {
+    remap_impl!(src, map0, map1,
+        ImageLuma8 => (Luma, [0]),
+        ImageLumaA8 => (LumaA, [0, 0]),
+        ImageLuma16 => (Luma, [0]),
+        ImageLumaA16 => (LumaA, [0, 0]),
+        ImageRgb8 => (Rgb, [0, 0, 0]),
+        ImageRgba8 => (Rgba, [0, 0, 0, 0]),
+        ImageRgb16 => (Rgb, [0, 0, 0]),
+        ImageRgba16 => (Rgba, [0, 0, 0, 0])
+    )
 }
 
 pub trait CameraModel<T: na::RealField + Clone>
