@@ -4,8 +4,7 @@ use image::ImageReader;
 use nalgebra as na;
 
 fn main() {
-    println!("remap");
-    let img = ImageReader::open("1520525741123145511.png")
+    let img = ImageReader::open("data/tum_vi_with_chartc.png")
         .unwrap()
         .decode()
         .unwrap();
@@ -26,5 +25,5 @@ fn main() {
     p[(1, 2)] = 256.0;
     let (xmap, ymap) = init_undistort_map(Box::new(&model), &p, (512, 512));
     let remaped = remap(&img, &xmap, &ymap);
-    remaped.save("rem.png").unwrap()
+    remaped.save("remaped.png").unwrap()
 }
