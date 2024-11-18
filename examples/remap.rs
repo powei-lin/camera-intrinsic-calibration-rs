@@ -4,7 +4,7 @@ use image::ImageReader;
 use nalgebra as na;
 
 fn main() {
-    let img = ImageReader::open("data/tum_vi_with_chartc.png")
+    let img = ImageReader::open("data/tum_vi_with_chart.png")
         .unwrap()
         .decode()
         .unwrap();

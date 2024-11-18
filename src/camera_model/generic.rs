@@ -12,13 +12,8 @@ pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32
                 if x_cor.is_nan() || y_cor.is_nan() {
                     return image::Luma([0]);
                 }
-                let x_cor = x_cor.round() as u32;
-                let y_cor = y_cor.round() as u32;
-                if x_cor >= img.width() || y_cor >= img.height() {
-                    image::Luma([0])
-                } else {
-                    img.get_pixel(x_cor, y_cor).to_owned()
-                }
+                image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
+                    .unwrap_or(image::Luma([0]))
             });
             DynamicImage::ImageLuma8(out_img)
         }
@@ -29,13 +24,8 @@ pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32
                 if x_cor.is_nan() || y_cor.is_nan() {
                     return image::Rgb([0, 0, 0]);
                 }
-                let x_cor = x_cor.round() as u32;
-                let y_cor = y_cor.round() as u32;
-                if x_cor >= img.width() || y_cor >= img.height() {
-                    image::Rgb([0, 0, 0])
-                } else {
-                    img.get_pixel(x_cor, y_cor).to_owned()
-                }
+                image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
+                    .unwrap_or(image::Rgb([0, 0, 0]))
             });
             DynamicImage::ImageRgb8(out_img)
         }
