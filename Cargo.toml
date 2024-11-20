@@ -1,7 +1,16 @@
 [package]
 name = "camera-intrinsic"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+authors = ["Powei Lin <poweilin1994@gmail.com>"]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+description = "Camera Intrinsics"
+homepage = "https://github.com/powei-lin/camera-intrinsic"
+repository = "https://github.com/powei-lin/camera-intrinsic"
+keywords = ["camera-intrinsic", "intrinsic", "fisheye"]
+categories = ["data-structures", "science", "mathematics"]
+exclude = ["/.github/*", "*.ipynb", "./scripts/*", "examples/*", "tests/*"]
 
 [dependencies]
 aprilgrid = "0.4.0"
