@@ -92,6 +92,10 @@ impl CameraModel<f64> for OpenCVFisheye<f64> {
         self.height as f64
     }
 
+    fn unproject_one(&self, pt: &nalgebra::Vector2<f64>) -> nalgebra::Vector3<f64> {
+        todo!()
+    }
+
     // fn unproject(&self, p2d: &[nalgebra::Point2<f64>]) -> Vec<Option<(f32, f32)>> {
     //     p2d.into_par_iter()
     //         .map(|p| {
@@ -149,5 +153,12 @@ impl CameraModel<num_dual::DualDVec64> for OpenCVFisheye<num_dual::DualDVec64> {
 
     fn height(&self) -> num_dual::DualDVec64 {
         num_dual::DualDVec64::from_u32(self.height).unwrap()
+    }
+
+    fn unproject_one(
+        &self,
+        pt: &nalgebra::Vector2<num_dual::DualDVec64>,
+    ) -> nalgebra::Vector3<num_dual::DualDVec64> {
+        todo!()
     }
 }

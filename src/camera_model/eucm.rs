@@ -64,4 +64,8 @@ impl CameraModel<f64> for EUCM<f64> {
     fn height(&self) -> f64 {
         self.height as f64
     }
+    
+    fn unproject_one(&self, pt: &nalgebra::Vector2<f64>) -> nalgebra::Vector3<f64> {
+        todo!()
+    }
 }

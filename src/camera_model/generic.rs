@@ -3,10 +3,10 @@ use nalgebra as na;
 use rayon::prelude::*;
 
 macro_rules! remap_impl {
-    ($reg:expr, $map0:expr, $map1:expr, $($img_type0:ident => ($inner_type:ident, $default_value:expr)),*) => {
-        match $reg {
+    ($src:expr, $map0:expr, $map1:expr, $($img_type:ident => ($inner_type:ident, $default_value:expr)),*) => {
+        match $src {
             $(
-                DynamicImage::$img_type0(img) => {
+                DynamicImage::$img_type(img) => {
                     let (r, c) = $map0.shape();
                     let out_img = image::ImageBuffer::from_par_fn(c as u32, r as u32, |x, y| {
                         let idx = y as usize * c + x as usize;
@@ -17,11 +17,11 @@ macro_rules! remap_impl {
                         image::imageops::interpolate_bilinear(img, *x_cor, *y_cor)
                             .unwrap_or(image::$inner_type($default_value))
                     });
-                    DynamicImage::$img_type0(out_img)
+                    DynamicImage::$img_type(out_img)
                 }
             )*
             _ => {
-                panic!("remap only supports gray8 and rgb8");
+                panic!("Not support this image type.");
             }
         }
     };
@@ -36,7 +36,9 @@ pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32
         ImageRgb8 => (Rgb, [0, 0, 0]),
         ImageRgba8 => (Rgba, [0, 0, 0, 0]),
         ImageRgb16 => (Rgb, [0, 0, 0]),
-        ImageRgba16 => (Rgba, [0, 0, 0, 0])
+        ImageRgba16 => (Rgba, [0, 0, 0, 0]),
+        ImageRgb32F => (Rgb, [0.0, 0.0, 0.0]),
+        ImageRgba32F => (Rgba, [0.0, 0.0, 0.0, 0.0])
     )
 }
 
@@ -60,6 +62,23 @@ where
                     None
                 } else {
                     Some(p2d)
+                }
+            })
+            .collect()
+    }
+    fn unproject_one(&self, pt: &na::Vector2<T>) -> na::Vector3<T>;
+    fn unproject(&self, p2d: &[na::Vector2<T>]) -> Vec<Option<na::Vector3<T>>> {
+        p2d.par_iter()
+            .map(|pt| {
+                if pt[0] < T::from_f64(0.0).unwrap()
+                    || pt[0] > self.width() - T::from_f64(1.0).unwrap()
+                    || pt[1] < T::from_f64(0.0).unwrap()
+                    || pt[1] > self.height() - T::from_f64(1.0).unwrap()
+                {
+                    None
+                } else {
+                    let p3d = self.unproject_one(pt);
+                    Some(p3d)
                 }
             })
             .collect()
@@ -101,4 +120,60 @@ pub fn init_undistort_map(
     let xmap = na::DMatrix::from_vec(new_h_w.0 as usize, new_h_w.1 as usize, xvec);
     let ymap = na::DMatrix::from_vec(new_h_w.0 as usize, new_h_w.1 as usize, yvec);
     (xmap, ymap)
+}
+
+pub fn estimate_new_camera_matrix_for_undistort(
+    camera_model: Box<&dyn CameraModel<f64>>,
+    balance: f64,
+    new_image_w_h: Option<(u32, u32)>,
+) -> na::Matrix3<f64> {
+    if !(0.0..=1.0).contains(&balance) {
+        panic!("balance should be [0.0-1.0], got {}", balance);
+    }
+    let params = camera_model.params();
+    let fx = params[0];
+    let fy = params[1];
+    let cx = params[2];
+    let cy = params[3];
+    let w = camera_model.width();
+    let h = camera_model.height();
+    let p2ds = vec![
+        na::Vector2::new(cx, 0.0),
+        na::Vector2::new(w as f64 - 1.0, cy),
+        na::Vector2::new(cx, h as f64 - 1.0),
+        na::Vector2::new(0.0, cy),
+    ];
+    let undist_pts = camera_model.unproject(&p2ds);
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
+    for p in undist_pts {
+        let p = p.unwrap();
+        min_x = min_x.min(p.x as f64);
+        min_y = min_y.min(p.y as f64);
+        max_x = max_x.max(p.x as f64);
+        max_y = max_y.max(p.y as f64);
+    }
+    min_x = min_x.abs();
+    min_y = min_y.abs();
+    let (new_w, new_h) = if let Some((new_w, new_h)) = new_image_w_h {
+        (new_w, new_h)
+    } else {
+        (camera_model.width() as u32, camera_model.height() as u32)
+    };
+    let new_cx = new_w as f64 * min_x / (min_x + max_x);
+    let new_cy = new_h as f64 * min_y / (min_y + max_y);
+    let fx = new_w as f64 / (min_x + max_x);
+    let fy = new_h as f64 / (min_y + max_y);
+    let fmin = fx.min(fy);
+    let fmax = fx.max(fy);
+    let new_f = balance * fmin + (1.0 - balance) * fmax;
+
+    let mut out = na::Matrix3::identity();
+    out[(0, 0)] = new_f;
+    out[(1, 1)] = new_f;
+    out[(0, 2)] = new_cx;
+    out[(1, 2)] = new_cy;
+    out
 }
