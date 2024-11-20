@@ -20,8 +20,9 @@ fn main() {
         1.0458678747533083
     ];
     let model = eucm::EUCM::new(&params, 512, 512);
-    let p = estimate_new_camera_matrix_for_undistort(Box::new(&model), 1.0, None);
-    let (xmap, ymap) = init_undistort_map(Box::new(&model), &p, (model.width, model.height));
+    let new_w_h = 1024;
+    let p = estimate_new_camera_matrix_for_undistort(&model, 1.0, Some((new_w_h, new_w_h)));
+    let (xmap, ymap) = init_undistort_map(&model, &p, (new_w_h, new_w_h));
     let remaped = remap(&img, &xmap, &ymap);
     remaped.save("remaped.png").unwrap()
 }

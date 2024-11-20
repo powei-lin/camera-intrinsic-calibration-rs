@@ -53,7 +53,7 @@ where
     fn project(&self, p3d: &[na::Vector3<T>]) -> Vec<Option<na::Vector2<T>>> {
         p3d.par_iter()
             .map(|pt| {
-                let p2d = self.project_one(&pt);
+                let p2d = self.project_one(pt);
                 if p2d[0] < T::from_f64(0.0).unwrap()
                     || p2d[0] > self.width()
                     || p2d[1] < T::from_f64(0.0).unwrap()
@@ -86,9 +86,9 @@ where
 }
 
 pub fn init_undistort_map(
-    camera_model: Box<&dyn CameraModel<f64>>,
+    camera_model: &dyn CameraModel<f64>,
     projection_mat: &na::Matrix3<f64>,
-    new_h_w: (u32, u32),
+    new_w_h: (u32, u32),
 ) -> (na::DMatrix<f32>, na::DMatrix<f32>) {
     if projection_mat.shape() != (3, 3) {
         panic!("projection matrix has the wrong shape");
@@ -97,10 +97,10 @@ pub fn init_undistort_map(
     let fy = projection_mat[(1, 1)];
     let cx = projection_mat[(0, 2)];
     let cy = projection_mat[(1, 2)];
-    let p3ds: Vec<na::Vector3<f64>> = (0..new_h_w.0)
+    let p3ds: Vec<na::Vector3<f64>> = (0..new_w_h.1)
         .into_par_iter()
         .flat_map(|y| {
-            (0..new_h_w.1)
+            (0..new_w_h.0)
                 .into_par_iter()
                 .map(|x| na::Vector3::new((x as f64 - cx) / fx, (y as f64 - cy) / fy, 1.0))
                 .collect::<Vec<na::Vector3<f64>>>()
@@ -117,13 +117,13 @@ pub fn init_undistort_map(
             }
         })
         .unzip();
-    let xmap = na::DMatrix::from_vec(new_h_w.0 as usize, new_h_w.1 as usize, xvec);
-    let ymap = na::DMatrix::from_vec(new_h_w.0 as usize, new_h_w.1 as usize, yvec);
+    let xmap = na::DMatrix::from_vec(new_w_h.1 as usize, new_w_h.0 as usize, xvec);
+    let ymap = na::DMatrix::from_vec(new_w_h.1 as usize, new_w_h.0 as usize, yvec);
     (xmap, ymap)
 }
 
 pub fn estimate_new_camera_matrix_for_undistort(
-    camera_model: Box<&dyn CameraModel<f64>>,
+    camera_model: &dyn CameraModel<f64>,
     balance: f64,
     new_image_w_h: Option<(u32, u32)>,
 ) -> na::Matrix3<f64> {
@@ -137,8 +137,8 @@ pub fn estimate_new_camera_matrix_for_undistort(
     let h = camera_model.height();
     let p2ds = vec![
         na::Vector2::new(cx, 0.0),
-        na::Vector2::new(w as f64 - 1.0, cy),
-        na::Vector2::new(cx, h as f64 - 1.0),
+        na::Vector2::new(w - 1.0, cy),
+        na::Vector2::new(cx, h - 1.0),
         na::Vector2::new(0.0, cy),
     ];
     let undist_pts = camera_model.unproject(&p2ds);
@@ -148,10 +148,10 @@ pub fn estimate_new_camera_matrix_for_undistort(
     let mut max_y = f64::MIN;
     for p in undist_pts {
         let p = p.unwrap();
-        min_x = min_x.min(p.x as f64);
-        min_y = min_y.min(p.y as f64);
-        max_x = max_x.max(p.x as f64);
-        max_y = max_y.max(p.y as f64);
+        min_x = min_x.min(p.x);
+        min_y = min_y.min(p.y);
+        max_x = max_x.max(p.x);
+        max_y = max_y.max(p.y);
     }
     min_x = min_x.abs();
     min_y = min_y.abs();

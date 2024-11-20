@@ -13,6 +13,9 @@ pub struct EUCM<T: na::RealField + Clone> {
 }
 impl<T: na::RealField + Clone> EUCM<T> {
     pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> EUCM<T> {
+        if params.shape() != (6, 1) {
+            panic!("the length of the vector should be 6");
+        }
         EUCM {
             fx: params[0].clone(),
             fy: params[1].clone(),
@@ -24,7 +27,30 @@ impl<T: na::RealField + Clone> EUCM<T> {
             height,
         }
     }
-    fn project_one_impl(params: &na::DVector<T>, pt: &na::Vector3<T>) -> na::Vector2<T> {
+}
+
+impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
+    #[inline]
+    fn params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.fx.clone(),
+            self.fy.clone(),
+            self.cx.clone(),
+            self.cy.clone(),
+            self.alpha.clone(),
+            self.beta.clone()
+        ]
+    }
+    fn width(&self) -> T {
+        T::from_u32(self.width).unwrap()
+    }
+
+    fn height(&self) -> T {
+        T::from_u32(self.height).unwrap()
+    }
+
+    fn project_one(&self, pt: &nalgebra::Vector3<T>) -> nalgebra::Vector2<T> {
+        let params = self.params();
         let fx = &params[0];
         let fy = &params[1];
         let cx = &params[2];
@@ -47,7 +73,9 @@ impl<T: na::RealField + Clone> EUCM<T> {
 
         na::Vector2::new(fx.clone() * mx + cx.clone(), fy.clone() * my + cy.clone())
     }
-    fn unproject_one_impl(params: &na::DVector<T>, pt: &na::Vector2<T>) -> na::Vector3<T> {
+
+    fn unproject_one(&self, pt: &nalgebra::Vector2<T>) -> nalgebra::Vector3<T> {
+        let params = self.params();
         let fx = &params[0];
         let fy = &params[1];
         let cx = &params[2];
@@ -69,26 +97,5 @@ impl<T: na::RealField + Clone> EUCM<T> {
         let k = tmp1 / tmp2;
 
         na::Vector3::new(mx / k.clone(), my / k, one)
-    }
-}
-
-impl CameraModel<f64> for EUCM<f64> {
-    fn params(&self) -> nalgebra::DVector<f64> {
-        na::dvector![self.fx, self.fy, self.cx, self.cy, self.alpha, self.beta]
-    }
-    fn project_one(&self, pt: &nalgebra::Vector3<f64>) -> nalgebra::Vector2<f64> {
-        Self::project_one_impl(&self.params(), pt)
-    }
-
-    fn width(&self) -> f64 {
-        self.width as f64
-    }
-
-    fn height(&self) -> f64 {
-        self.height as f64
-    }
-
-    fn unproject_one(&self, pt: &nalgebra::Vector2<f64>) -> nalgebra::Vector3<f64> {
-        Self::unproject_one_impl(&self.params(), pt)
     }
 }

@@ -1,6 +1,5 @@
 use super::generic::CameraModel;
 use nalgebra as na;
-use num_traits::FromPrimitive;
 
 pub struct OpenCVFisheye<T: na::RealField + Clone> {
     pub fx: T,
@@ -42,8 +41,8 @@ impl<T: na::RealField + Clone> OpenCVFisheye<T> {
                 + k3.clone() * theta6
                 + k4.clone() * theta8)
     }
-    fn df_dtheta(k1: &T, k2: &T, k3: &T, k4: &T, theta: T) -> T {
-        let theta2 = theta.clone() * theta;
+    fn df_dtheta(k1: &T, k2: &T, k3: &T, k4: &T, theta: &T) -> T {
+        let theta2 = theta.clone() * theta.clone();
         let theta4 = theta2.clone() * theta2.clone();
         let theta6 = theta2.clone() * theta4.clone();
         let theta8 = theta2.clone() * theta6.clone();
@@ -53,7 +52,32 @@ impl<T: na::RealField + Clone> OpenCVFisheye<T> {
             + T::from_f64(7.0).unwrap() * k3.clone() * theta6
             + T::from_f64(9.0).unwrap() * k4.clone() * theta8
     }
-    fn project_one_impl(params: &na::DVector<T>, pt: &na::Vector3<T>) -> na::Vector2<T> {
+}
+
+impl<T: na::RealField + Clone> CameraModel<T> for OpenCVFisheye<T> {
+    fn params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.fx.clone(),
+            self.fy.clone(),
+            self.cx.clone(),
+            self.cy.clone(),
+            self.k1.clone(),
+            self.k2.clone(),
+            self.k3.clone(),
+            self.k4.clone()
+        ]
+    }
+
+    fn width(&self) -> T {
+        T::from_u32(self.width).unwrap()
+    }
+
+    fn height(&self) -> T {
+        T::from_u32(self.height).unwrap()
+    }
+
+    fn project_one(&self, pt: &nalgebra::Vector3<T>) -> nalgebra::Vector2<T> {
+        let params = self.params();
         let xn = pt[0].clone() / pt[2].clone();
         let yn = pt[1].clone() / pt[2].clone();
         let r2 = xn.clone() * xn.clone() + yn.clone() * yn.clone();
@@ -73,92 +97,33 @@ impl<T: na::RealField + Clone> OpenCVFisheye<T> {
         let py = fy.clone() * (yn * d) + cy.clone();
         na::Vector2::new(px, py)
     }
-}
-// // num_dual::DualDVec64
 
-impl CameraModel<f64> for OpenCVFisheye<f64> {
-    fn params(&self) -> nalgebra::DVector<f64> {
-        na::dvector![self.fx, self.fy, self.cx, self.cy, self.k1, self.k2, self.k3, self.k4]
-    }
-    fn project_one(&self, pt: &nalgebra::Vector3<f64>) -> nalgebra::Vector2<f64> {
-        Self::project_one_impl(&self.params(), pt)
-    }
+    fn unproject_one(&self, pt: &nalgebra::Vector2<T>) -> nalgebra::Vector3<T> {
+        let xd = (pt[0].clone() - self.cx.clone()) / self.fx.clone();
+        let yd = (pt[1].clone() - self.cy.clone()) / self.fy.clone();
 
-    fn width(&self) -> f64 {
-        self.width as f64
-    }
-
-    fn height(&self) -> f64 {
-        self.height as f64
-    }
-
-    fn unproject_one(&self, pt: &nalgebra::Vector2<f64>) -> nalgebra::Vector3<f64> {
-        todo!()
-    }
-
-    // fn unproject(&self, p2d: &[nalgebra::Point2<f64>]) -> Vec<Option<(f32, f32)>> {
-    //     p2d.into_par_iter()
-    //         .map(|p| {
-    //             if p.x < 0.0 || p.y < 0.0 || p.x >= self.width as f64 || p.y >= self.height as f64 {
-    //                 return None;
-    //             }
-    //             let xd = (p.x - self.cx) / self.fx;
-    //             let yd = (p.y - self.cy) / self.fy;
-
-    //             let theta_d_2 = xd * xd + yd * yd;
-    //             let theta_d = theta_d_2.sqrt();
-    //             let mut theta = theta_d;
-    //             if theta > 1e-6 {
-    //                 for _ in 0..5 {
-    //                     let theta_next = theta - (self.f(theta) - theta_d) / self.df_dtheta(theta);
-    //                     if (theta_next - theta).abs() < 1e-6 {
-    //                         theta = theta_next;
-    //                         break;
-    //                     }
-    //                     theta = theta_next;
-    //                 }
-    //                 let scaling = theta.tan() / theta_d;
-    //                 Some(((xd * scaling) as f32, (yd * scaling) as f32))
-    //             } else {
-    //                 Some((0.0, 0.0))
-    //             }
-    //         })
-    //         .collect()
-    // }
-}
-
-impl CameraModel<num_dual::DualDVec64> for OpenCVFisheye<num_dual::DualDVec64> {
-    fn params(&self) -> nalgebra::DVector<num_dual::DualDVec64> {
-        na::dvector![
-            self.fx.clone(),
-            self.fy.clone(),
-            self.cx.clone(),
-            self.cy.clone(),
-            self.k1.clone(),
-            self.k2.clone(),
-            self.k3.clone(),
-            self.k4.clone()
-        ]
-    }
-    fn project_one(
-        &self,
-        pt: &nalgebra::Vector3<num_dual::DualDVec64>,
-    ) -> nalgebra::Vector2<num_dual::DualDVec64> {
-        Self::project_one_impl(&self.params(), pt)
-    }
-
-    fn width(&self) -> num_dual::DualDVec64 {
-        num_dual::DualDVec64::from_u32(self.width).unwrap()
-    }
-
-    fn height(&self) -> num_dual::DualDVec64 {
-        num_dual::DualDVec64::from_u32(self.height).unwrap()
-    }
-
-    fn unproject_one(
-        &self,
-        pt: &nalgebra::Vector2<num_dual::DualDVec64>,
-    ) -> nalgebra::Vector3<num_dual::DualDVec64> {
-        todo!()
+        let theta_d_2 = xd.clone() * xd.clone() + yd.clone() * yd.clone();
+        let theta_d = theta_d_2.sqrt();
+        let mut theta = theta_d.clone();
+        let theta_threshold = T::from_f64(1e-6).unwrap();
+        let one = T::from_f64(1.0).unwrap();
+        let zero = T::from_f64(0.0).unwrap();
+        if theta > theta_threshold {
+            for _ in 0..5 {
+                let theta_next = theta.clone()
+                    - (Self::f(&self.k1, &self.k2, &self.k3, &self.k4, &theta.clone())
+                        - theta_d.clone())
+                        / Self::df_dtheta(&self.k1, &self.k2, &self.k3, &self.k4, &theta);
+                if (theta_next.clone() - theta).abs() < theta_threshold {
+                    theta = theta_next.clone();
+                    break;
+                }
+                theta = theta_next;
+            }
+            let scaling = theta.tan() / theta_d;
+            na::Vector3::new(xd * scaling.clone(), yd * scaling, one)
+        } else {
+            na::Vector3::new(zero.clone(), zero, one)
+        }
     }
 }
