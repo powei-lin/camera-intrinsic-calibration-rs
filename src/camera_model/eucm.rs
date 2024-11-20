@@ -47,6 +47,29 @@ impl<T: na::RealField + Clone> EUCM<T> {
 
         na::Vector2::new(fx.clone() * mx + cx.clone(), fy.clone() * my + cy.clone())
     }
+    fn unproject_one_impl(params: &na::DVector<T>, pt: &na::Vector2<T>) -> na::Vector3<T> {
+        let fx = &params[0];
+        let fy = &params[1];
+        let cx = &params[2];
+        let cy = &params[3];
+        let alpha = &params[4];
+        let beta = &params[5];
+        let one = T::from_f64(1.0).unwrap();
+
+        let mx = (pt[0].clone() - cx.clone()) / fx.clone();
+        let my = (pt[1].clone() - cy.clone()) / fy.clone();
+
+        let r2 = mx.clone() * mx.clone() + my.clone() * my.clone();
+        let gamma = one.clone() - alpha.clone();
+
+        let tmp1 = one.clone() - alpha.clone() * alpha.clone() * beta.clone() * r2.clone();
+        let tmp_sqrt = (one.clone() - (alpha.clone() - gamma.clone()) * beta.clone() * r2).sqrt();
+        let tmp2 = alpha.clone() * tmp_sqrt + gamma;
+
+        let k = tmp1 / tmp2;
+
+        na::Vector3::new(mx / k.clone(), my / k, one)
+    }
 }
 
 impl CameraModel<f64> for EUCM<f64> {
@@ -64,8 +87,8 @@ impl CameraModel<f64> for EUCM<f64> {
     fn height(&self) -> f64 {
         self.height as f64
     }
-    
+
     fn unproject_one(&self, pt: &nalgebra::Vector2<f64>) -> nalgebra::Vector3<f64> {
-        todo!()
+        Self::unproject_one_impl(&self.params(), pt)
     }
 }

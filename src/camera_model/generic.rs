@@ -131,8 +131,6 @@ pub fn estimate_new_camera_matrix_for_undistort(
         panic!("balance should be [0.0-1.0], got {}", balance);
     }
     let params = camera_model.params();
-    let fx = params[0];
-    let fy = params[1];
     let cx = params[2];
     let cy = params[3];
     let w = camera_model.width();

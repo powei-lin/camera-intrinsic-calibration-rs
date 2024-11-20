@@ -1,5 +1,7 @@
 use camera_intrinsic::camera_model::eucm;
-use camera_intrinsic::camera_model::generic::{init_undistort_map, remap};
+use camera_intrinsic::camera_model::generic::{
+    estimate_new_camera_matrix_for_undistort, init_undistort_map, remap,
+};
 use image::ImageReader;
 use nalgebra as na;
 
@@ -18,13 +20,8 @@ fn main() {
         1.0458678747533083
     ];
     let model = eucm::EUCM::new(&params, 512, 512);
-    let mut p = na::Matrix3::identity();
-    let f = 100.0;
-    p[(0, 0)] = f;
-    p[(1, 1)] = f;
-    p[(0, 2)] = 256.0;
-    p[(1, 2)] = 256.0;
-    let (xmap, ymap) = init_undistort_map(Box::new(&model), &p, (512, 512));
+    let p = estimate_new_camera_matrix_for_undistort(Box::new(&model), 1.0, None);
+    let (xmap, ymap) = init_undistort_map(Box::new(&model), &p, (model.width, model.height));
     let remaped = remap(&img, &xmap, &ymap);
     remaped.save("remaped.png").unwrap()
 }
