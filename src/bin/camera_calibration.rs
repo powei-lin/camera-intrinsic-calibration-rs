@@ -1,15 +1,27 @@
 use aprilgrid::detector::TagDetector;
-use aprilgrid::TagFamily::T36H11;
+use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::visualization::*;
+use clap::Parser;
 use std::time::Instant;
 
+#[derive(Parser)]
+#[command(version, about, author)]
+struct CCRSCli {
+    /// path to image folder
+    path: String,
+
+    /// tag_family: ["t16h5", "t25h7", "t25h9", "t36h11", "t36h11b1"]
+    #[arg(value_enum, default_value = "t36h11")]
+    tag_family: TagFamily,
+}
+
 fn main() {
-    let detector = TagDetector::new(&T36H11, None);
+    let cli = CCRSCli::parse();
+    let detector = TagDetector::new(&cli.tag_family, None);
     let board = create_default_6x6_board();
-    let dataset_root = "/Users/powei/Documents/dataset/EuRoC/calibration/";
-    let dataset_root = "/Users/powei/Documents/dataset/tum_vi/dataset-calib-cam1_1024_16";
+    let dataset_root = &cli.path;
     let now = Instant::now();
     let recording = rerun::RecordingStreamBuilder::new("calibration")
         .save("output.rrd")

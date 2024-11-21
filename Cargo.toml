@@ -1,6 +1,6 @@
 [package]
 name = "camera-intrinsic"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["Powei Lin <poweilin1994@gmail.com>"]
 readme = "README.md"
@@ -13,7 +13,8 @@ categories = ["data-structures", "science", "mathematics"]
 exclude = ["/.github/*", "*.ipynb", "./scripts/*", "examples/*", "tests/*"]
 
 [dependencies]
-aprilgrid = "0.4.0"
+aprilgrid = "0.4.1"
+clap = { version = "4.5.15", features = ["derive"] }
 glam = "0.29.2"
 glob = "0.3.1"
 image = "0.25.5"
@@ -25,6 +26,12 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rerun = "0.17.0"
 tiny-solver = "0.8.0"
+
+[[bin]]
+name = "ccrs"
+path = "src/bin/camera_calibration.rs"
+test = false
+bench = false
 
 [[example]]
 name = "remap"
