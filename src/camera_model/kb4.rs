@@ -1,7 +1,7 @@
 use super::generic::CameraModel;
 use nalgebra as na;
 
-pub struct OpenCVFisheye<T: na::RealField + Clone> {
+pub struct KannalaBrandt4<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
     pub cx: T,
@@ -13,9 +13,9 @@ pub struct OpenCVFisheye<T: na::RealField + Clone> {
     pub width: u32,
     pub height: u32,
 }
-impl<T: na::RealField + Clone> OpenCVFisheye<T> {
-    pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> OpenCVFisheye<T> {
-        OpenCVFisheye {
+impl<T: na::RealField + Clone> KannalaBrandt4<T> {
+    pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> KannalaBrandt4<T> {
+        KannalaBrandt4 {
             fx: params[0].clone(),
             fy: params[1].clone(),
             cx: params[2].clone(),
@@ -54,7 +54,7 @@ impl<T: na::RealField + Clone> OpenCVFisheye<T> {
     }
 }
 
-impl<T: na::RealField + Clone> CameraModel<T> for OpenCVFisheye<T> {
+impl<T: na::RealField + Clone> CameraModel<T> for KannalaBrandt4<T> {
     fn params(&self) -> nalgebra::DVector<T> {
         na::dvector![
             self.fx.clone(),
