@@ -15,6 +15,7 @@ exclude = ["/.github/*", "*.ipynb", "./scripts/*", "examples/*", "tests/*"]
 [dependencies]
 aprilgrid = "0.4.1"
 clap = { version = "4.5.15", features = ["derive"] }
+env_logger = "0.11.5"
 glam = "0.29.2"
 glob = "0.3.1"
 image = "0.25.5"
