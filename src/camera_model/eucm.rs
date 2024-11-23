@@ -105,4 +105,17 @@ impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
 
         na::Vector3::new(mx / k.clone(), my / k, one)
     }
+
+    fn camera_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.fx.clone(),
+            self.fy.clone(),
+            self.cx.clone(),
+            self.cy.clone()
+        ]
+    }
+
+    fn distortion_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![self.alpha.clone(), self.beta.clone()]
+    }
 }

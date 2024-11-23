@@ -152,4 +152,22 @@ impl<T: na::RealField + Clone> CameraModel<T> for OpenCVModel5<T> {
             na::Vector3::new(zero.clone(), zero, one)
         }
     }
+    fn camera_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.fx.clone(),
+            self.fy.clone(),
+            self.cx.clone(),
+            self.cy.clone()
+        ]
+    }
+
+    fn distortion_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.k1.clone(),
+            self.k2.clone(),
+            self.p1.clone(),
+            self.p2.clone(),
+            self.k3.clone()
+        ]
+    }
 }

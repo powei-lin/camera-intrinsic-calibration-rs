@@ -1,6 +1,7 @@
 use super::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
 use image::DynamicImage;
 use nalgebra as na;
+use num_dual::DualDVec64;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -51,19 +52,47 @@ impl GenericModel<f64> {
     generic_impl_self!(width, f64);
     generic_impl_self!(height, f64);
     generic_impl_self!(params, na::DVector<f64>);
+    generic_impl_self!(camera_params, na::DVector<f64>);
+    generic_impl_self!(distortion_params, na::DVector<f64>);
     generic_impl_self!(project_one, na::Vector2<f64>, pt: &na::Vector3<f64>);
     generic_impl_self!(unproject_one, na::Vector3<f64>, pt: &na::Vector2<f64>);
     generic_impl_self!(project, Vec<Option<na::Vector2<f64>>>, p3d: &[na::Vector3<f64>]);
     generic_impl_self!(unproject, Vec<Option<na::Vector3<f64>>>, p2d: &[na::Vector2<f64>]);
-    pub fn cast<T: na::RealField + Clone>(&self) -> Box<dyn CameraModel<T>> {
+    pub fn cast<T: na::RealField + Clone>(&self) -> GenericModel<T> {
         match self {
-            GenericModel::EUCM(eucm) => Box::new(EUCM::from(eucm)),
-            GenericModel::UCM(ucm) => Box::new(UCM::from(ucm)),
+            GenericModel::EUCM(eucm) => GenericModel::EUCM(EUCM::from(eucm)),
+            GenericModel::UCM(ucm) => GenericModel::UCM(UCM::from(ucm)),
             GenericModel::OpenCVModel5(open_cvmodel5) => {
-                Box::new(OpenCVModel5::from(open_cvmodel5))
+                GenericModel::OpenCVModel5(OpenCVModel5::from(open_cvmodel5))
             }
             GenericModel::KannalaBrandt4(kannala_brandt4) => {
-                Box::new(KannalaBrandt4::from(kannala_brandt4))
+                GenericModel::KannalaBrandt4(KannalaBrandt4::from(kannala_brandt4))
+            }
+        }
+    }
+}
+
+impl GenericModel<num_dual::DualDVec64> {
+    // generic_impl!(init_undistort_map, (na::DMatrix<f32>, na::DMatrix<f32>), projection_mat: &na::Matrix3<f64>, new_w_h: (u32, u32));
+    // generic_impl!(estimate_new_camera_matrix_for_undistort, na::Matrix3<f64>, balance: f64, new_image_w_h: Option<(u32, u32)>);
+    // generic_impl_self!(width, f64);
+    // generic_impl_self!(height, f64);
+    generic_impl_self!(params, na::DVector<DualDVec64>);
+    generic_impl_self!(camera_params, na::DVector<DualDVec64>);
+    generic_impl_self!(distortion_params, na::DVector<DualDVec64>);
+    generic_impl_self!(project_one, na::Vector2<DualDVec64>, pt: &na::Vector3<DualDVec64>);
+    generic_impl_self!(unproject_one, na::Vector3<DualDVec64>, pt: &na::Vector2<DualDVec64>);
+    generic_impl_self!(project, Vec<Option<na::Vector2<num_dual::DualDVec64>>>, p3d: &[na::Vector3<num_dual::DualDVec64>]);
+    generic_impl_self!(unproject, Vec<Option<na::Vector3<num_dual::DualDVec64>>>, p2d: &[na::Vector2<num_dual::DualDVec64>]);
+    pub fn cast<T: na::RealField + Clone>(&self) -> GenericModel<T> {
+        match self {
+            GenericModel::EUCM(eucm) => GenericModel::EUCM(EUCM::from(eucm)),
+            GenericModel::UCM(ucm) => GenericModel::UCM(UCM::from(ucm)),
+            GenericModel::OpenCVModel5(open_cvmodel5) => {
+                GenericModel::OpenCVModel5(OpenCVModel5::from(open_cvmodel5))
+            }
+            GenericModel::KannalaBrandt4(kannala_brandt4) => {
+                GenericModel::KannalaBrandt4(KannalaBrandt4::from(kannala_brandt4))
             }
         }
     }
@@ -125,6 +154,8 @@ where
     Self: Sync,
 {
     fn params(&self) -> na::DVector<T>;
+    fn camera_params(&self) -> na::DVector<T>;
+    fn distortion_params(&self) -> na::DVector<T>;
     fn width(&self) -> T;
     fn height(&self) -> T;
     fn project_one(&self, pt: &na::Vector3<T>) -> na::Vector2<T>;

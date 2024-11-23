@@ -2,7 +2,7 @@ use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Default)]
 pub struct KannalaBrandt4<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
@@ -131,5 +131,22 @@ impl<T: na::RealField + Clone> CameraModel<T> for KannalaBrandt4<T> {
         } else {
             na::Vector3::new(zero.clone(), zero, one)
         }
+    }
+    fn camera_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.fx.clone(),
+            self.fy.clone(),
+            self.cx.clone(),
+            self.cy.clone()
+        ]
+    }
+
+    fn distortion_params(&self) -> nalgebra::DVector<T> {
+        na::dvector![
+            self.k1.clone(),
+            self.k2.clone(),
+            self.k3.clone(),
+            self.k4.clone()
+        ]
     }
 }
