@@ -10,7 +10,8 @@ use tiny_solver::factors::Factor;
 use tiny_solver::Optimizer;
 
 pub struct CustomFactor {
-    pub eucm: EUCM<num_dual::DualDVec64>,
+    pub model0: GenericModel<f64>,
+    pub model1: GenericModel<f64>,
     pub p3ds: Vec<na::Vector3<f64>>,
 }
 
@@ -20,7 +21,11 @@ impl Factor for CustomFactor {
         params: &[nalgebra::DVector<num_dual::DualDVec64>],
     ) -> nalgebra::DVector<num_dual::DualDVec64> {
         let kb4_model: KannalaBrandt4<num_dual::DualVec<f64, f64, nalgebra::Dyn>> =
-            KannalaBrandt4::new(&params[0], self.eucm.width, self.eucm.height);
+            KannalaBrandt4::new(
+                &params[0],
+                self.model0.width().round() as u32,
+                self.model0.height().round() as u32,
+            );
         let p3ds: Vec<_> = self
             .p3ds
             .iter()
@@ -32,7 +37,7 @@ impl Factor for CustomFactor {
                 )
             })
             .collect();
-        let p2ds0 = self.eucm.project(&p3ds);
+        let p2ds0 = self.model0.cast().project(&p3ds);
         let p2ds1 = kb4_model.project(&p3ds);
         let diff: Vec<_> = p2ds0
             .iter()
@@ -62,46 +67,50 @@ fn main() {
         .unwrap();
     let img = image::DynamicImage::ImageLuma8(img.to_luma8());
     let model = model_from_json("data/eucm.json");
-    if let GenericModel::EUCM(m) = model {
-        let mut p2ds = Vec::new();
-        for r in (10..m.height - 10).step_by(3) {
-            for c in (10..m.width - 10).step_by(3) {
-                p2ds.push(na::Vector2::new(c as f64, r as f64));
-            }
+    let mut p2ds = Vec::new();
+    for r in (10..model.height() as u32 - 10).step_by(3) {
+        for c in (10..model.width() as u32 - 10).step_by(3) {
+            p2ds.push(na::Vector2::new(c as f64, r as f64));
         }
-        let p3ds = m.unproject(&p2ds);
-        let p3ds: Vec<_> = p3ds.iter().filter_map(|p| p.clone()).collect();
-        // init problem (factor graph)
-        let mut problem = tiny_solver::Problem::new();
-
-        // add custom residual for x and yz
-        problem.add_residual_block(
-            p3ds.len() * 2,
-            vec![("x".to_string(), 8)],
-            Box::new(CustomFactor {
-                eucm: EUCM::from(&m),
-                p3ds,
-            }),
-            None,
-        );
-
-        // the initial values for x is 0.7 and yz is [-30.2, 123.4]
-        let initial_values = HashMap::<String, na::DVector<f64>>::from([(
-            "x".to_string(),
-            na::dvector![m.fx, m.fy, m.cx, m.cy, 0.0, 0.0, 0.0, 0.0],
-        )]);
-
-        // initialize optimizer
-        let optimizer = tiny_solver::GaussNewtonOptimizer {};
-
-        // optimize
-        let result = optimizer.optimize(&problem, &initial_values, None);
-        println!("{:?}", result);
-        let fisheye = KannalaBrandt4::new(result.get("x").unwrap(), m.width, m.height);
-        let new_w_h = 1024;
-        let p = estimate_new_camera_matrix_for_undistort(&fisheye, 1.0, Some((new_w_h, new_w_h)));
-        let (xmap, ymap) = init_undistort_map(&fisheye, &p, (new_w_h, new_w_h));
-        let remaped = remap(&img, &xmap, &ymap);
-        remaped.save("remaped_fisheye.png").unwrap()
     }
+    let p3ds = model.unproject(&p2ds);
+    let p3ds: Vec<_> = p3ds.iter().filter_map(|p| p.clone()).collect();
+    // init problem (factor graph)
+    let mut problem = tiny_solver::Problem::new();
+
+    // add custom residual for x and yz
+    problem.add_residual_block(
+        p3ds.len() * 2,
+        vec![("x".to_string(), 8)],
+        Box::new(CustomFactor {
+            model0: model,
+            model1: model,
+            p3ds,
+        }),
+        None,
+    );
+
+    let params = model.params();
+    // the initial values for x is 0.7 and yz is [-30.2, 123.4]
+    let initial_values = HashMap::<String, na::DVector<f64>>::from([(
+        "x".to_string(),
+        na::dvector![params[0], params[1], params[2], params[3], 0.0, 0.0, 0.0, 0.0],
+    )]);
+
+    // initialize optimizer
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+
+    // optimize
+    let result = optimizer.optimize(&problem, &initial_values, None);
+    println!("{:?}", result);
+    let fisheye = KannalaBrandt4::new(
+        result.get("x").unwrap(),
+        model.width() as u32,
+        model.height() as u32,
+    );
+    let new_w_h = 1024;
+    let p = estimate_new_camera_matrix_for_undistort(&fisheye, 1.0, Some((new_w_h, new_w_h)));
+    let (xmap, ymap) = init_undistort_map(&fisheye, &p, (new_w_h, new_w_h));
+    let remaped = remap(&img, &xmap, &ymap);
+    remaped.save("remaped_fisheye.png").unwrap()
 }

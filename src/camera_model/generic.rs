@@ -4,7 +4,7 @@ use nalgebra as na;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum GenericModel<T: na::RealField> {
     EUCM(EUCM<T>),
     UCM(UCM<T>),
@@ -12,8 +12,8 @@ pub enum GenericModel<T: na::RealField> {
     KannalaBrandt4(KannalaBrandt4<T>),
 }
 macro_rules! generic_impl {
-    ($fn_name:tt, $outt:ty, $($v:tt: $t:ty),+) => {
-        pub fn $fn_name(&self, $($v: $t),+) -> $outt{
+    ($fn_name:tt, $out:ty, $($v:tt: $t:ty),+) => {
+        pub fn $fn_name(&self, $($v: $t),+) -> $out{
             match self {
                 GenericModel::EUCM(eucm) => $fn_name(eucm, $($v),+),
                 GenericModel::UCM(ucm) => $fn_name(ucm, $($v),+),
@@ -23,9 +23,50 @@ macro_rules! generic_impl {
         }
     };
 }
+macro_rules! generic_impl_self {
+    ($fn_name:tt, $out:ty) => {
+        pub fn $fn_name(&self) -> $out{
+            match self {
+                GenericModel::EUCM(eucm) => eucm.$fn_name(),
+                GenericModel::UCM(ucm) => ucm.$fn_name(),
+                GenericModel::OpenCVModel5(open_cvmodel5) => open_cvmodel5.$fn_name(),
+                GenericModel::KannalaBrandt4(kannala_brandt4) => kannala_brandt4.$fn_name()
+            }
+        }
+    };
+    ($fn_name:tt, $out:ty, $($v:tt: $t:ty),+) => {
+        pub fn $fn_name(&self, $($v: $t),+) -> $out{
+            match self {
+                GenericModel::EUCM(eucm) => eucm.$fn_name($($v),+),
+                GenericModel::UCM(ucm) => ucm.$fn_name($($v),+),
+                GenericModel::OpenCVModel5(open_cvmodel5) => open_cvmodel5.$fn_name($($v),+),
+                GenericModel::KannalaBrandt4(kannala_brandt4) => kannala_brandt4.$fn_name($($v),+)
+            }
+        }
+    };
+}
 impl GenericModel<f64> {
     generic_impl!(init_undistort_map, (na::DMatrix<f32>, na::DMatrix<f32>), projection_mat: &na::Matrix3<f64>, new_w_h: (u32, u32));
     generic_impl!(estimate_new_camera_matrix_for_undistort, na::Matrix3<f64>, balance: f64, new_image_w_h: Option<(u32, u32)>);
+    generic_impl_self!(width, f64);
+    generic_impl_self!(height, f64);
+    generic_impl_self!(params, na::DVector<f64>);
+    generic_impl_self!(project_one, na::Vector2<f64>, pt: &na::Vector3<f64>);
+    generic_impl_self!(unproject_one, na::Vector3<f64>, pt: &na::Vector2<f64>);
+    generic_impl_self!(project, Vec<Option<na::Vector2<f64>>>, p3d: &[na::Vector3<f64>]);
+    generic_impl_self!(unproject, Vec<Option<na::Vector3<f64>>>, p2d: &[na::Vector2<f64>]);
+    pub fn cast<T: na::RealField + Clone>(&self) -> Box<dyn CameraModel<T>> {
+        match self {
+            GenericModel::EUCM(eucm) => Box::new(EUCM::from(eucm)),
+            GenericModel::UCM(ucm) => Box::new(UCM::from(ucm)),
+            GenericModel::OpenCVModel5(open_cvmodel5) => {
+                Box::new(OpenCVModel5::from(open_cvmodel5))
+            }
+            GenericModel::KannalaBrandt4(kannala_brandt4) => {
+                Box::new(KannalaBrandt4::from(kannala_brandt4))
+            }
+        }
+    }
 }
 
 macro_rules! remap_impl {
