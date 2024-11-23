@@ -61,6 +61,19 @@ impl<T: na::RealField + Clone> KannalaBrandt4<T> {
 }
 
 impl<T: na::RealField + Clone> CameraModel<T> for KannalaBrandt4<T> {
+    fn set_params(&mut self, params: &nalgebra::DVector<T>) {
+        if params.shape() != self.params().shape() {
+            panic!("params has wrong shape.")
+        }
+        self.fx = params[0].clone();
+        self.fy = params[1].clone();
+        self.cx = params[2].clone();
+        self.cy = params[3].clone();
+        self.k1 = params[4].clone();
+        self.k2 = params[5].clone();
+        self.k3 = params[6].clone();
+        self.k4 = params[7].clone();
+    }
     fn params(&self) -> nalgebra::DVector<T> {
         na::dvector![
             self.fx.clone(),

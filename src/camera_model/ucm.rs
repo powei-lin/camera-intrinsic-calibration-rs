@@ -14,8 +14,8 @@ pub struct UCM<T: na::RealField + Clone> {
 }
 impl<T: na::RealField + Clone> UCM<T> {
     pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> UCM<T> {
-        if params.shape() != (6, 1) {
-            panic!("the length of the vector should be 6");
+        if params.shape() != (5, 1) {
+            panic!("the length of the vector should be 5");
         }
         UCM {
             fx: params[0].clone(),
@@ -34,6 +34,16 @@ impl<T: na::RealField + Clone> UCM<T> {
 
 impl<T: na::RealField + Clone> ModelCast<T> for UCM<T> {}
 impl<T: na::RealField + Clone> CameraModel<T> for UCM<T> {
+    fn set_params(&mut self, params: &nalgebra::DVector<T>) {
+        if params.shape() != self.params().shape() {
+            panic!("params has wrong shape.")
+        }
+        self.fx = params[0].clone();
+        self.fy = params[1].clone();
+        self.cx = params[2].clone();
+        self.cy = params[3].clone();
+        self.alpha = params[4].clone();
+    }
     #[inline]
     fn params(&self) -> nalgebra::DVector<T> {
         na::dvector![

@@ -25,7 +25,7 @@ macro_rules! generic_impl {
     };
 }
 macro_rules! generic_impl_self {
-    ($fn_name:tt, $out:ty) => {
+    ($fn_name:tt -> $out:ty) => {
         pub fn $fn_name(&self) -> $out{
             match self {
                 GenericModel::EUCM(eucm) => eucm.$fn_name(),
@@ -45,15 +45,26 @@ macro_rules! generic_impl_self {
             }
         }
     };
+    ($fn_name:tt, $($v:tt: $t:ty),+) => {
+        pub fn $fn_name(&mut self, $($v: $t),+){
+            match self {
+                GenericModel::EUCM(eucm) => eucm.$fn_name($($v),+),
+                GenericModel::UCM(ucm) => ucm.$fn_name($($v),+),
+                GenericModel::OpenCVModel5(open_cvmodel5) => open_cvmodel5.$fn_name($($v),+),
+                GenericModel::KannalaBrandt4(kannala_brandt4) => kannala_brandt4.$fn_name($($v),+)
+            }
+        }
+    };
 }
 impl GenericModel<f64> {
     generic_impl!(init_undistort_map, (na::DMatrix<f32>, na::DMatrix<f32>), projection_mat: &na::Matrix3<f64>, new_w_h: (u32, u32));
     generic_impl!(estimate_new_camera_matrix_for_undistort, na::Matrix3<f64>, balance: f64, new_image_w_h: Option<(u32, u32)>);
-    generic_impl_self!(width, f64);
-    generic_impl_self!(height, f64);
-    generic_impl_self!(params, na::DVector<f64>);
-    generic_impl_self!(camera_params, na::DVector<f64>);
-    generic_impl_self!(distortion_params, na::DVector<f64>);
+    generic_impl_self!(width -> f64);
+    generic_impl_self!(height -> f64);
+    generic_impl_self!(params -> na::DVector<f64>);
+    generic_impl_self!(set_params, params: &na::DVector<f64>);
+    generic_impl_self!(camera_params -> na::DVector<f64>);
+    generic_impl_self!(distortion_params -> na::DVector<f64>);
     generic_impl_self!(project_one, na::Vector2<f64>, pt: &na::Vector3<f64>);
     generic_impl_self!(unproject_one, na::Vector3<f64>, pt: &na::Vector2<f64>);
     generic_impl_self!(project, Vec<Option<na::Vector2<f64>>>, p3d: &[na::Vector3<f64>]);
@@ -77,9 +88,10 @@ impl GenericModel<num_dual::DualDVec64> {
     // generic_impl!(estimate_new_camera_matrix_for_undistort, na::Matrix3<f64>, balance: f64, new_image_w_h: Option<(u32, u32)>);
     // generic_impl_self!(width, f64);
     // generic_impl_self!(height, f64);
-    generic_impl_self!(params, na::DVector<DualDVec64>);
-    generic_impl_self!(camera_params, na::DVector<DualDVec64>);
-    generic_impl_self!(distortion_params, na::DVector<DualDVec64>);
+    generic_impl_self!(params -> na::DVector<DualDVec64>);
+    generic_impl_self!(set_params, params: &na::DVector<DualDVec64>);
+    generic_impl_self!(camera_params -> na::DVector<DualDVec64>);
+    generic_impl_self!(distortion_params -> na::DVector<DualDVec64>);
     generic_impl_self!(project_one, na::Vector2<DualDVec64>, pt: &na::Vector3<DualDVec64>);
     generic_impl_self!(unproject_one, na::Vector3<DualDVec64>, pt: &na::Vector2<DualDVec64>);
     generic_impl_self!(project, Vec<Option<na::Vector2<num_dual::DualDVec64>>>, p3d: &[na::Vector3<num_dual::DualDVec64>]);
@@ -153,6 +165,7 @@ pub trait CameraModel<T: na::RealField + Clone>
 where
     Self: Sync,
 {
+    fn set_params(&mut self, params: &na::DVector<T>);
     fn params(&self) -> na::DVector<T>;
     fn camera_params(&self) -> na::DVector<T>;
     fn distortion_params(&self) -> na::DVector<T>;

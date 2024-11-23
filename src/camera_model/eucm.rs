@@ -37,6 +37,17 @@ impl<T: na::RealField + Clone> EUCM<T> {
 impl<T: na::RealField + Clone> ModelCast<T> for EUCM<T> {}
 
 impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
+    fn set_params(&mut self, params: &nalgebra::DVector<T>) {
+        if params.shape() != self.params().shape() {
+            panic!("params has wrong shape.")
+        }
+        self.fx = params[0].clone();
+        self.fy = params[1].clone();
+        self.cx = params[2].clone();
+        self.cy = params[3].clone();
+        self.alpha = params[4].clone();
+        self.beta = params[5].clone();
+    }
     #[inline]
     fn params(&self) -> nalgebra::DVector<T> {
         na::dvector![
