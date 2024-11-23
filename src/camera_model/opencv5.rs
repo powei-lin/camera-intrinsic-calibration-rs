@@ -1,6 +1,8 @@
 use super::generic::CameraModel;
 use nalgebra as na;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub struct OpenCVModel5<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,

@@ -1,7 +1,10 @@
-use camera_intrinsic::camera_model::eucm;
+use std::io::Write;
+
 use camera_intrinsic::camera_model::generic::{
-    estimate_new_camera_matrix_for_undistort, init_undistort_map, remap,
+    estimate_new_camera_matrix_for_undistort, init_undistort_map, remap, GenericModel,
 };
+use camera_intrinsic::camera_model::model_to_json;
+use camera_intrinsic::camera_model::{eucm, model_from_json};
 use image::ImageReader;
 use nalgebra as na;
 
@@ -19,10 +22,12 @@ fn main() {
         0.6283550447635853,
         1.0458678747533083
     ];
-    let model = eucm::EUCM::new(&params, 512, 512);
+    let model0 = eucm::EUCM::new(&params, 512, 512);
+    model_to_json("eucm.json", &GenericModel::EUCM(model0));
+    let model1 = model_from_json("eucm.json");
     let new_w_h = 1024;
-    let p = estimate_new_camera_matrix_for_undistort(&model, 1.0, Some((new_w_h, new_w_h)));
-    let (xmap, ymap) = init_undistort_map(&model, &p, (new_w_h, new_w_h));
+    let p = model1.estimate_new_camera_matrix_for_undistort(1.0, Some((new_w_h, new_w_h)));
+    let (xmap, ymap) = model1.init_undistort_map(&p, (new_w_h, new_w_h));
     let remaped = remap(&img, &xmap, &ymap);
     remaped.save("remaped.png").unwrap()
 }

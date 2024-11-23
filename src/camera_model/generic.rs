@@ -1,6 +1,54 @@
+use super::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
 use image::DynamicImage;
 use nalgebra as na;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub enum GenericModel<T: na::RealField> {
+    EUCM(EUCM<T>),
+    UCM(UCM<T>),
+    OpenCVModel5(OpenCVModel5<T>),
+    KannalaBrandt4(KannalaBrandt4<T>),
+}
+impl GenericModel<f64> {
+    pub fn init_undistort_map(
+        &self,
+        projection_mat: &na::Matrix3<f64>,
+        new_w_h: (u32, u32),
+    ) -> (na::DMatrix<f32>, na::DMatrix<f32>) {
+        match self {
+            GenericModel::EUCM(eucm) => init_undistort_map(eucm, projection_mat, new_w_h),
+            GenericModel::UCM(ucm) => init_undistort_map(ucm, projection_mat, new_w_h),
+            GenericModel::OpenCVModel5(open_cvmodel5) => {
+                init_undistort_map(open_cvmodel5, projection_mat, new_w_h)
+            }
+            GenericModel::KannalaBrandt4(kannala_brandt4) => {
+                init_undistort_map(kannala_brandt4, projection_mat, new_w_h)
+            }
+        }
+    }
+    pub fn estimate_new_camera_matrix_for_undistort(
+        &self,
+        balance: f64,
+        new_image_w_h: Option<(u32, u32)>,
+    ) -> na::Matrix3<f64> {
+        match self {
+            GenericModel::EUCM(eucm) => {
+                estimate_new_camera_matrix_for_undistort(eucm, balance, new_image_w_h)
+            }
+            GenericModel::UCM(ucm) => {
+                estimate_new_camera_matrix_for_undistort(ucm, balance, new_image_w_h)
+            }
+            GenericModel::OpenCVModel5(open_cvmodel5) => {
+                estimate_new_camera_matrix_for_undistort(open_cvmodel5, balance, new_image_w_h)
+            }
+            GenericModel::KannalaBrandt4(kannala_brandt4) => {
+                estimate_new_camera_matrix_for_undistort(kannala_brandt4, balance, new_image_w_h)
+            }
+        }
+    }
+}
 
 macro_rules! remap_impl {
     ($src:expr, $map0:expr, $map1:expr, $($img_type:ident => ($inner_type:ident, $default_value:expr)),*) => {
