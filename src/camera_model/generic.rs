@@ -90,6 +90,17 @@ pub fn remap(src: &DynamicImage, map0: &na::DMatrix<f32>, map1: &na::DMatrix<f32
     )
 }
 
+pub trait ModelCast<T: na::RealField + Clone>: CameraModel<T> {
+    fn cast<U: na::RealField>(&self) -> na::DVector<U> {
+        let v: Vec<_> = self
+            .params()
+            .iter()
+            .map(|i| U::from_f64(i.to_subset().unwrap()).unwrap())
+            .collect();
+        na::DVector::from_vec(v)
+    }
+}
+
 pub trait CameraModel<T: na::RealField + Clone>
 where
     Self: Sync,

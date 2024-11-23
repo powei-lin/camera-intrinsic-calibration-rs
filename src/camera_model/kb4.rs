@@ -1,4 +1,4 @@
-use super::generic::CameraModel;
+use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +15,7 @@ pub struct KannalaBrandt4<T: na::RealField + Clone> {
     pub width: u32,
     pub height: u32,
 }
+impl<T: na::RealField + Clone> ModelCast<T> for KannalaBrandt4<T> {}
 impl<T: na::RealField + Clone> KannalaBrandt4<T> {
     pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> KannalaBrandt4<T> {
         KannalaBrandt4 {
@@ -53,6 +54,9 @@ impl<T: na::RealField + Clone> KannalaBrandt4<T> {
             + T::from_f64(5.0).unwrap() * k2.clone() * theta4
             + T::from_f64(7.0).unwrap() * k3.clone() * theta6
             + T::from_f64(9.0).unwrap() * k4.clone() * theta8
+    }
+    pub fn from<U: na::RealField + Clone>(m: &KannalaBrandt4<U>) -> KannalaBrandt4<T> {
+        KannalaBrandt4::new(&m.cast(), m.width, m.height)
     }
 }
 

@@ -1,4 +1,4 @@
-use super::generic::CameraModel;
+use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +16,7 @@ pub struct OpenCVModel5<T: na::RealField + Clone> {
     pub width: u32,
     pub height: u32,
 }
+impl<T: na::RealField + Clone> ModelCast<T> for OpenCVModel5<T> {}
 impl<T: na::RealField + Clone> OpenCVModel5<T> {
     pub fn new(params: &na::DVector<T>, width: u32, height: u32) -> OpenCVModel5<T> {
         OpenCVModel5 {
@@ -63,6 +64,9 @@ impl<T: na::RealField + Clone> OpenCVModel5<T> {
             + two.clone() * self.p1.clone() * (r2 + two * yn.clone() * yn.clone())
             + self.p2.clone() * xn.clone() * yn.clone();
         (xd, yd)
+    }
+    pub fn from<U: na::RealField + Clone>(m: &OpenCVModel5<U>) -> OpenCVModel5<T> {
+        OpenCVModel5::new(&m.cast(), m.width, m.height)
     }
 }
 

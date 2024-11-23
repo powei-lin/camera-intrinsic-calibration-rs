@@ -1,4 +1,4 @@
-use super::generic::CameraModel;
+use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,12 @@ impl<T: na::RealField + Clone> EUCM<T> {
             height,
         }
     }
+    pub fn from<U: na::RealField + Clone>(m: &EUCM<U>) -> EUCM<T> {
+        EUCM::new(&m.cast(), m.width, m.height)
+    }
 }
+
+impl<T: na::RealField + Clone> ModelCast<T> for EUCM<T> {}
 
 impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
     #[inline]
