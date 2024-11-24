@@ -36,11 +36,13 @@ impl CustomFactor {
         let p3ds: Vec<_> = p3ds
             .iter()
             .filter_map(|p| {
-                p.as_ref().map(|pp| na::Vector3::new(
+                p.as_ref().map(|pp| {
+                    na::Vector3::new(
                         num_dual::DualDVec64::from_re(pp.x),
                         num_dual::DualDVec64::from_re(pp.y),
                         num_dual::DualDVec64::from_re(pp.z),
-                    ))
+                    )
+                })
             })
             .collect();
         CustomFactor {
