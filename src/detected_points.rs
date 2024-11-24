@@ -10,5 +10,6 @@ pub struct FeaturePoint {
 #[derive(Debug, Clone)]
 pub struct FrameFeature {
     pub time_ns: i64,
+    pub img_w_h: (u32, u32),
     pub features: HashMap<u32, FeaturePoint>,
 }

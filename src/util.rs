@@ -1,26 +1,29 @@
 use std::collections::HashMap;
 
+use crate::camera_model::CameraModel;
+
 use super::camera_model::generic::GenericModel;
 use super::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
-use nalgebra as na;
+use nalgebra::{self as na, Const, Dyn};
 use num_dual::DualDVec64;
 use tiny_solver::factors::Factor;
+use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
 
 #[derive(Clone)]
-pub struct CustomFactor {
+pub struct ModelConvertFactor {
     pub source: GenericModel<DualDVec64>,
     pub target: GenericModel<DualDVec64>,
     pub p3ds: Vec<na::Vector3<DualDVec64>>,
 }
 
-impl CustomFactor {
+impl ModelConvertFactor {
     pub fn new(
         source: &GenericModel<f64>,
         target: &GenericModel<f64>,
         edge_pixels: u32,
         steps: usize,
-    ) -> CustomFactor {
+    ) -> ModelConvertFactor {
         if source.width().round() as u32 != target.width().round() as u32 {
             panic!("source width and target width are not the same.")
         } else if source.height().round() as u32 != target.height().round() as u32 {
@@ -45,7 +48,7 @@ impl CustomFactor {
                 })
             })
             .collect();
-        CustomFactor {
+        ModelConvertFactor {
             source: source.cast(),
             target: target.cast(),
             p3ds,
@@ -56,7 +59,7 @@ impl CustomFactor {
     }
 }
 
-impl Factor for CustomFactor {
+impl Factor for ModelConvertFactor {
     fn residual_func(
         &self,
         params: &[nalgebra::DVector<num_dual::DualDVec64>],
@@ -96,12 +99,12 @@ impl Factor for CustomFactor {
 pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut GenericModel<f64>) {
     let mut problem = tiny_solver::Problem::new();
     let edge_pixels = source_model.width().max(source_model.height()) as u32 / 100;
-    let cost = CustomFactor::new(source_model, target_model, edge_pixels, 3);
+    let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, 3);
     problem.add_residual_block(
         cost.residaul_num(),
         vec![("x".to_string(), target_model.params().len())],
         Box::new(cost),
-        None,
+        Some(Box::new(HuberLoss::new(1.0))),
     );
 
     let camera_params = source_model.camera_params();
@@ -120,4 +123,84 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
     // save result
     let result_params = result.get("x").unwrap();
     target_model.set_params(result_params);
+}
+
+pub struct CustomFactor {
+    p2d0: na::Vector2<DualDVec64>,
+    p2d1: na::Vector2<DualDVec64>,
+    img_w: u32,
+    img_h: u32,
+}
+
+impl CustomFactor {
+    pub fn new(p2d0v: &glam::Vec2, p2d1v: &glam::Vec2, img_w: u32, img_h: u32) -> CustomFactor {
+        let p2d0 = na::Vector2::new(
+            DualDVec64::from_re(p2d0v.x as f64),
+            DualDVec64::from_re(p2d0v.y as f64),
+        );
+        let p2d1 = na::Vector2::new(
+            DualDVec64::from_re(p2d1v.x as f64),
+            DualDVec64::from_re(p2d1v.y as f64),
+        );
+        CustomFactor {
+            p2d0,
+            p2d1,
+            img_w,
+            img_h,
+        }
+    }
+}
+
+impl Factor for CustomFactor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        // let f = params[0][0].clone();
+        // let alpha = params[0][1].clone();
+        let f = DualDVec64::from_re(189.0);
+        let alpha = DualDVec64::from_re(0.6);
+        let cx = DualDVec64::from_re(self.img_w as f64 / 2.0);
+        let cy = DualDVec64::from_re(self.img_h as f64 / 2.0);
+        let new_params = na::dvector![f.clone(), f, cx, cy, alpha];
+        let ucm = UCM::new(&new_params, self.img_w, self.img_h);
+        let h_flat = params[0].push(DualDVec64::from_re(1.0));
+        let h = h_flat.reshape_generic(Const::<3>, Dyn(3));
+        let p3d0 = ucm.unproject_one(&self.p2d0);
+        let p3d1 = h * p3d0;
+        let p2d1p = ucm.project_one(&p3d1);
+        let diff = p2d1p - self.p2d1.clone();
+        na::dvector![diff[0].clone(), diff[1].clone()]
+    }
+}
+
+pub fn init_ucm(p2d_pairs: &[(glam::Vec2, glam::Vec2)], img_w: u32, img_h: u32) {
+    let mut problem = tiny_solver::Problem::new();
+    for (p2d0, p2d1) in p2d_pairs {
+        let cost = CustomFactor::new(p2d0, p2d1, img_w, img_h);
+        problem.add_residual_block(
+            2,
+            vec![("h".to_string(), 8)],
+            Box::new(cost),
+            Some(Box::new(HuberLoss::new(1.0))),
+        );
+    }
+    // vec![("fx_alpha".to_string(), 2), ("h".to_string(), 8)],
+
+    let f_init = img_w.max(img_h) as f64 / 2.0;
+
+    let fx_alpha_init = na::dvector![f_init, 0.6];
+    let h_flat_init = na::dvector![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+
+    let initial_values =
+        HashMap::<String, na::DVector<f64>>::from([("h".to_string(), h_flat_init)]);
+
+    // initialize optimizer
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+
+    // optimize
+    let result = optimizer.optimize(&problem, &initial_values, None);
+    println!("{:?}", result);
+    // save result
+    // let result_params = result.get("x").unwrap();
 }

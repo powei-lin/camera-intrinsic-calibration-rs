@@ -28,7 +28,6 @@ pub fn load_euroc(
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<FrameFeature> {
     let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
-
     img_paths
         .par_bridge()
         .map(|path| {
@@ -59,6 +58,7 @@ pub fn load_euroc(
                 .collect();
             FrameFeature {
                 time_ns,
+                img_w_h: (img.width(), img.height()),
                 features: tags_expand_ids,
             }
         })
