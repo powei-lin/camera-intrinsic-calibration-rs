@@ -151,28 +151,28 @@ impl CustomFactor {
     }
 }
 
-// impl Factor for CustomFactor {
-//     fn residual_func(
-//         &self,
-//         params: &[nalgebra::DVector<num_dual::DualDVec64>],
-//     ) -> nalgebra::DVector<num_dual::DualDVec64> {
-//         // let f = params[0][0].clone();
-//         // let alpha = params[0][1].clone();
-//         let f = DualDVec64::from_re(189.0);
-//         let alpha = DualDVec64::from_re(0.6);
-//         let cx = DualDVec64::from_re(self.img_w as f64 / 2.0);
-//         let cy = DualDVec64::from_re(self.img_h as f64 / 2.0);
-//         let new_params = na::dvector![f.clone(), f, cx, cy, alpha];
-//         let ucm = UCM::new(&new_params, self.img_w, self.img_h);
-//         let h_flat = params[0].push(DualDVec64::from_re(1.0));
-//         let h = h_flat.reshape_generic(Const::<3>, Dyn(3));
-//         let p3d0 = ucm.unproject_one(&self.p2d0);
-//         let p3d1 = h * p3d0;
-//         let p2d1p = ucm.project_one(&p3d1);
-//         let diff = p2d1p - self.p2d1.clone();
-//         na::dvector![diff[0].clone(), diff[1].clone()]
-//     }
-// }
+impl Factor for CustomFactor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        // let f = params[0][0].clone();
+        // let alpha = params[0][1].clone();
+        let f = DualDVec64::from_re(189.0);
+        let alpha = DualDVec64::from_re(0.6);
+        let cx = DualDVec64::from_re(self.img_w as f64 / 2.0);
+        let cy = DualDVec64::from_re(self.img_h as f64 / 2.0);
+        let new_params = na::dvector![f.clone(), f, cx, cy, alpha];
+        let ucm = UCM::new(&new_params, self.img_w, self.img_h);
+        let h_flat = params[0].push(DualDVec64::from_re(1.0));
+        let h = h_flat.reshape_generic(Const::<3>, Dyn(3));
+        let p3d0 = ucm.unproject_one(&self.p2d0);
+        let p3d1 = h * p3d0;
+        let p2d1p = ucm.project_one(&p3d1);
+        let diff = p2d1p - self.p2d1.clone();
+        na::dvector![diff[0].clone(), diff[1].clone()]
+    }
+}
 
 pub fn init_ucm(p2d_pairs: &[(glam::Vec2, glam::Vec2)], img_w: u32, img_h: u32) {
     let mut problem = tiny_solver::Problem::new();
