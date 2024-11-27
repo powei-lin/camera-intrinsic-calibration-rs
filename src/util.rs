@@ -204,3 +204,44 @@ pub fn init_ucm(p2d_pairs: &[(glam::Vec2, glam::Vec2)], img_w: u32, img_h: u32) 
     // save result
     // let result_params = result.get("x").unwrap();
 }
+
+pub struct RandomPnpFactor {
+    p2d: na::Vector2<DualDVec64>,
+    p3d: na::Point3<DualDVec64>,
+}
+impl RandomPnpFactor {
+    pub fn new(p2d: &glam::Vec2, p3d: &glam::Vec3) -> RandomPnpFactor {
+        let p2d = na::Vector2::new(
+            DualDVec64::from_re(p2d.x as f64),
+            DualDVec64::from_re(p2d.y as f64),
+        );
+        let p3d = na::Point3::new(
+            DualDVec64::from_re(p3d.x as f64),
+            DualDVec64::from_re(p3d.y as f64),
+            DualDVec64::from_re(p3d.z as f64),
+        );
+        RandomPnpFactor { p2d, p3d }
+    }
+}
+impl Factor for RandomPnpFactor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        let rvec = na::Vector3::new(
+            params[0][0].clone(),
+            params[0][1].clone(),
+            params[0][2].clone(),
+        );
+        let tvec = na::Vector3::new(
+            params[1][0].clone(),
+            params[1][1].clone(),
+            params[1][2].clone(),
+        );
+        let transform = na::Isometry3::new(tvec, rvec);
+        let p3dp = transform * self.p3d.clone();
+        let x = p3dp.x.clone() / p3dp.z.clone();
+        let y = p3dp.y.clone() / p3dp.z.clone();
+        na::dvector![x - self.p2d.x.clone(), y - self.p2d.y.clone()]
+    }
+}

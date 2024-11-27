@@ -3,20 +3,20 @@ use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
-use camera_intrinsic::util::init_ucm;
+use camera_intrinsic::util::{init_ucm, RandomPnpFactor};
 use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
-use faer::col::ColBatch;
 use faer::solvers::SpSolverLstsq;
 use glam::Vec2;
 use log::trace;
 use nalgebra as na;
 use rand::seq::SliceRandom;
-use rand::Rng;
 use rerun::RecordingStream;
 use std::collections::HashMap;
 use std::time::Instant;
+use tiny_solver::loss_functions::HuberLoss;
+use tiny_solver::Optimizer;
 
 #[derive(Parser)]
 #[command(version, about, author)]
@@ -93,7 +93,7 @@ fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usi
         .collect();
 
     let avg_all = v.iter().map(|(_, p)| *p).reduce(|acc, e| acc + e).unwrap() / v.len() as f32;
-    let avg_all = Vec2::ZERO;
+    // let avg_all = Vec2::ZERO;
     v.sort_by(|a, b| {
         vec2_distance2(&a.1, &avg_all)
             .partial_cmp(&vec2_distance2(&b.1, &avg_all))
@@ -345,6 +345,87 @@ fn radial_distortion_homography(
     (best_lambda, best_H)
 }
 
+fn random_pnp(normalized_undistort_pt_pair: &[(glam::Vec2, glam::Vec3)]) {
+    let mut problem = tiny_solver::Problem::new();
+    for (p2d, p3d) in normalized_undistort_pt_pair {
+        let cost = RandomPnpFactor::new(p2d, p3d);
+        problem.add_residual_block(
+            2,
+            vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
+            Box::new(cost),
+            Some(Box::new(HuberLoss::new(1.0))),
+        );
+    }
+
+    let initial_values = HashMap::<String, na::DVector<f64>>::from([
+        ("rvec".to_string(), na::dvector![0.0, 0.0, 0.01]),
+        ("tvec".to_string(), na::dvector![-0.6, 0.0, 0.22,]),
+    ]);
+
+    // initialize optimizer
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+
+    // optimize
+    let result = optimizer.optimize(&problem, &initial_values, None);
+    println!("{:?}", result);
+}
+
+fn homography_to_focal(h_mat: &na::Matrix3<f32>) -> Option<f32> {
+    let h0 = h_mat[(0, 0)];
+    let h1 = h_mat[(0, 1)];
+    let h2 = h_mat[(0, 2)];
+    let h3 = h_mat[(1, 0)];
+    let h4 = h_mat[(1, 1)];
+    let h5 = h_mat[(1, 2)];
+    let h6 = h_mat[(2, 0)];
+    let h7 = h_mat[(2, 1)];
+    let h8 = h_mat[(2, 2)];
+
+    let d1 = h6 * h7;
+    let d2 = (h7 - h6) * (h7 + h6);
+    let v1 = -(h0 * h1 + h3 * h4) / d1;
+    let v2 = (h0 * h0 + h3 * h3 - h1 * h1 - h4 * h4) / d2;
+    let (v1, v2) = if (v1 < v2) { (v2, v1) } else { (v1, v2) };
+
+    let f1 = if (v1 > 0.0 && v2 > 0.0) {
+        if d1.abs() > d2.abs() {
+            Some(v1.sqrt())
+        } else {
+            Some(v2.sqrt())
+        }
+    } else if v1 > 0.0 {
+        Some(v1.sqrt())
+    } else {
+        None
+    };
+
+    let d1 = h0 * h3 + h1 * h4;
+    let d2 = h0 * h0 + h1 * h1 - h3 * h3 - h4 * h4;
+    let v1 = -h2 * h5 / d1;
+    let v2 = (h5 * h5 - h2 * h2) / d2;
+    let (v1, v2) = if (v1 < v2) { (v2, v1) } else { (v1, v2) };
+    let f0 = if (v1 > 0.0 && v2 > 0.0) {
+        if d1.abs() > d2.abs() {
+            Some(v1.sqrt())
+        } else {
+            Some(v2.sqrt())
+        }
+    } else if (v1 > 0.0) {
+        Some(v1.sqrt())
+    } else {
+        None
+    };
+    if f0.is_some() && f1.is_some() {
+        Some((f0.unwrap() * f1.unwrap()).sqrt())
+    } else if f0.is_some() {
+        f0
+    } else if f1.is_some() {
+        f1
+    } else {
+        None
+    }
+}
+
 fn main() {
     env_logger::init();
     let cli = CCRSCli::parse();
@@ -356,7 +437,7 @@ fn main() {
         .save("output.rrd")
         .unwrap();
     trace!("Start loading data");
-    let detected_feature_frames = load_euroc(dataset_root, &detector, &board, Some(&recording));
+    let detected_feature_frames = load_euroc(dataset_root, &detector, &board, None);
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
     println!(
@@ -379,7 +460,21 @@ fn main() {
     let half_w = frame_feature0.img_w_h.0 as f32 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f32 / 2.0;
     let half_img_size = half_h.max(half_w);
+    let f_option = homography_to_focal(&h_mat);
+    if let Some(f) = f_option {
+        println!("f = {}", f * half_img_size)
+    }
     let cxcy = glam::Vec2::new(half_w, half_h);
+    let normalized_undistort_frame_feauture0: Vec<_> = frame_feature0
+        .features
+        .iter()
+        .map(|f| {
+            let xy = (f.1.p2d - cxcy) / half_img_size;
+            let sc = 1.0 + lambda * (xy.x * xy.x + xy.y * xy.y);
+            (xy / sc * half_img_size, f.1.p3d)
+        })
+        .collect();
+    return;
     let normalized_p2d_pairs: Vec<_> = frame_feature0
         .features
         .iter()
