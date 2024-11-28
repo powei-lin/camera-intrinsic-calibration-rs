@@ -361,80 +361,116 @@ pub fn init_ucm(
     let focal = second_round_values["params"][0];
     let alpha = second_round_values["params"][1];
     let ucm_all_params = na::dvector![focal, focal, half_w, half_h, alpha];
+    let ucm_camera = GenericModel::UCM(UCM::new(
+        &ucm_all_params,
+        frame_feature0.img_w_h.0,
+        frame_feature0.img_w_h.1,
+    ));
     second_round_values.remove("params");
-    second_round_values.insert("all_params".to_string(), ucm_all_params);
-    let mut ucm_all_problem = tiny_solver::Problem::new();
+    calib_camera(
+        &[frame_feature0.clone(), frame_feature1.clone()],
+        &ucm_camera,
+        Some(second_round_values),
+    );
+    // second_round_values.insert("all_params".to_string(), ucm_all_params);
+    // let mut ucm_all_problem = tiny_solver::Problem::new();
 
-    for (_, fp) in &frame_feature0.features {
-        let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
-        ucm_all_problem.add_residual_block(
-            2,
-            vec![
-                ("all_params".to_string(), 5),
-                ("rvec0".to_string(), 3),
-                ("tvec0".to_string(), 3),
-            ],
-            Box::new(cost),
-            Some(Box::new(HuberLoss::new(1.0))),
-        );
-    }
+    // for (_, fp) in &frame_feature0.features {
+    //     let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
+    //     ucm_all_problem.add_residual_block(
+    //         2,
+    //         vec![
+    //             ("all_params".to_string(), 5),
+    //             ("rvec0".to_string(), 3),
+    //             ("tvec0".to_string(), 3),
+    //         ],
+    //         Box::new(cost),
+    //         Some(Box::new(HuberLoss::new(1.0))),
+    //     );
+    // }
 
-    for (_, fp) in &frame_feature1.features {
-        let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
-        ucm_all_problem.add_residual_block(
-            2,
-            vec![
-                ("all_params".to_string(), 5),
-                ("rvec1".to_string(), 3),
-                ("tvec1".to_string(), 3),
-            ],
-            Box::new(cost),
-            Some(Box::new(HuberLoss::new(1.0))),
-        );
-    }
-    let result = optimizer.optimize(&ucm_all_problem, &second_round_values, None);
-    println!("{:?}", result);
+    // for (_, fp) in &frame_feature1.features {
+    //     let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
+    //     ucm_all_problem.add_residual_block(
+    //         2,
+    //         vec![
+    //             ("all_params".to_string(), 5),
+    //             ("rvec1".to_string(), 3),
+    //             ("tvec1".to_string(), 3),
+    //         ],
+    //         Box::new(cost),
+    //         Some(Box::new(HuberLoss::new(1.0))),
+    //     );
+    // }
+    // let result = optimizer.optimize(&ucm_all_problem, &second_round_values, None);
+    // println!("{:?}", result);
     // save result
     // let result_params = result.get("x").unwrap();
 }
 
-pub struct RandomPnpFactor {
-    p2d: na::Vector2<DualDVec64>,
-    p3d: na::Point3<DualDVec64>,
-}
-impl RandomPnpFactor {
-    pub fn new(p2d: &glam::Vec2, p3d: &glam::Vec3) -> RandomPnpFactor {
-        let p2d = na::Vector2::new(
-            DualDVec64::from_re(p2d.x as f64),
-            DualDVec64::from_re(p2d.y as f64),
-        );
-        let p3d = na::Point3::new(
-            DualDVec64::from_re(p3d.x as f64),
-            DualDVec64::from_re(p3d.y as f64),
-            DualDVec64::from_re(p3d.z as f64),
-        );
-        RandomPnpFactor { p2d, p3d }
+pub fn calib_camera(
+    frame_feature_list: &[FrameFeature],
+    generic_camera: &GenericModel<f64>,
+    initial_values_option: Option<HashMap<String, na::DVector<f64>>>,
+) {
+    let params = generic_camera.params();
+    let params_len = params.len();
+    let mut problem = tiny_solver::Problem::new();
+    let mut initial_values = if let Some(mut init_values) = initial_values_option {
+        init_values.insert("params".to_string(), params);
+        init_values
+    } else {
+        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)])
+    };
+    println!("init {:?}", initial_values);
+
+    for (i, frame_feature) in frame_feature_list.iter().enumerate() {
+        let mut p3ds = Vec::new();
+        let mut p2ds = Vec::new();
+        let rvec_name = format!("rvec{}", i);
+        let tvec_name = format!("tvec{}", i);
+        for (_, fp) in &frame_feature.features {
+            let cost = ReprojectionFactor::new(&generic_camera, &fp.p3d, &fp.p2d);
+            problem.add_residual_block(
+                2,
+                vec![
+                    ("params".to_string(), params_len),
+                    (rvec_name.clone(), 3),
+                    (tvec_name.clone(), 3),
+                ],
+                Box::new(cost),
+                Some(Box::new(HuberLoss::new(1.0))),
+            );
+            p3ds.push(fp.p3d);
+            p2ds.push(na::Vector2::new(fp.p2d.x as f64, fp.p2d.y as f64));
+        }
+        let undistorted = generic_camera.unproject(&p2ds);
+        let (p3ds, p2ds_z): (Vec<_>, Vec<_>) = undistorted
+            .iter()
+            .zip(p3ds)
+            .filter_map(|(p2, p3)| {
+                if let Some(p2) = p2 {
+                    Some((p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
+                } else {
+                    None
+                }
+            })
+            .unzip();
+        if p3ds.len() < 6 {
+            println!("skip frame {}", i);
+            continue;
+        }
+        let (rvec, tvec) =
+            rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
+        if !initial_values.contains_key(&rvec_name) {
+            initial_values.insert(rvec_name, rvec);
+        }
+        if !initial_values.contains_key(&tvec_name) {
+            initial_values.insert(tvec_name, tvec);
+        }
     }
-}
-impl Factor for RandomPnpFactor {
-    fn residual_func(
-        &self,
-        params: &[nalgebra::DVector<num_dual::DualDVec64>],
-    ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        let rvec = na::Vector3::new(
-            params[0][0].clone(),
-            params[0][1].clone(),
-            params[0][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let transform = na::Isometry3::new(tvec, rvec);
-        let p3dp = transform * self.p3d.clone();
-        let x = p3dp.x.clone() / p3dp.z.clone();
-        let y = p3dp.y.clone() / p3dp.z.clone();
-        na::dvector![x - self.p2d.x.clone(), y - self.p2d.y.clone()]
-    }
+
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    let result = optimizer.optimize(&problem, &initial_values, None);
+    println!("params {}", result.get("params").unwrap());
 }

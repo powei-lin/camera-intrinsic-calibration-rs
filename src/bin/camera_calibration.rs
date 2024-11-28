@@ -3,7 +3,7 @@ use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
-use camera_intrinsic::util::{init_ucm, rtvec_to_na_dvec, RandomPnpFactor};
+use camera_intrinsic::util::{init_ucm, rtvec_to_na_dvec};
 use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
@@ -344,31 +344,6 @@ fn radial_distortion_homography(
     println!("lambda {}, d {}", best_lambda, best_distance);
     println!("{}", best_H);
     (best_lambda, best_H)
-}
-
-fn random_pnp(normalized_undistort_pt_pair: &[(glam::Vec2, glam::Vec3)]) {
-    let mut problem = tiny_solver::Problem::new();
-    for (p2d, p3d) in normalized_undistort_pt_pair {
-        let cost = RandomPnpFactor::new(p2d, p3d);
-        problem.add_residual_block(
-            2,
-            vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
-            Box::new(cost),
-            Some(Box::new(HuberLoss::new(1.0))),
-        );
-    }
-
-    let initial_values = HashMap::<String, na::DVector<f64>>::from([
-        ("rvec".to_string(), na::dvector![0.0, 0.0, 0.01]),
-        ("tvec".to_string(), na::dvector![-0.6, 0.0, 0.22,]),
-    ]);
-
-    // initialize optimizer
-    let optimizer = tiny_solver::GaussNewtonOptimizer {};
-
-    // optimize
-    let result = optimizer.optimize(&problem, &initial_values, None);
-    println!("{:?}", result);
 }
 
 fn homography_to_focal(h_mat: &na::Matrix3<f32>) -> Option<f32> {
