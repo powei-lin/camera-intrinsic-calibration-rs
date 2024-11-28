@@ -5,7 +5,7 @@ use camera_intrinsic::util::convert_model;
 use faer;
 use image::ImageReader;
 use nalgebra as na;
-use rand::{self, random};
+use rand;
 
 fn main() {
     env_logger::init();

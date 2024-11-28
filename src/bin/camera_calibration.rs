@@ -3,7 +3,7 @@ use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
-use camera_intrinsic::util::{init_ucm, RandomPnpFactor};
+use camera_intrinsic::util::{init_ucm, rtvec_to_na_dvec, RandomPnpFactor};
 use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
@@ -13,6 +13,7 @@ use log::trace;
 use nalgebra as na;
 use rand::seq::SliceRandom;
 use rerun::RecordingStream;
+use sqpnp_simple::sqpnp_solve_glam;
 use std::collections::HashMap;
 use std::time::Instant;
 use tiny_solver::loss_functions::HuberLoss;
@@ -426,6 +427,24 @@ fn homography_to_focal(h_mat: &na::Matrix3<f32>) -> Option<f32> {
     }
 }
 
+fn init_pose(frame_feature: &FrameFeature, lambda: f32) -> ((f64, f64, f64), (f64, f64, f64)) {
+    let half_w = frame_feature.img_w_h.0 as f32 / 2.0;
+    let half_h = frame_feature.img_w_h.1 as f32 / 2.0;
+    let half_img_size = half_h.max(half_w);
+    let cxcy = glam::Vec2::new(half_w, half_h);
+    let (p2ds_z, p3ds): (Vec<_>, Vec<_>) = frame_feature
+        .features
+        .iter()
+        .map(|f| {
+            let xy = (f.1.p2d - cxcy) / half_img_size;
+            let sc = 1.0 + lambda * (xy.x * xy.x + xy.y * xy.y);
+            (xy / sc, f.1.p3d)
+        })
+        .unzip();
+
+    sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap()
+}
+
 fn main() {
     env_logger::init();
     let cli = CCRSCli::parse();
@@ -451,81 +470,96 @@ fn main() {
         detected_feature_frames[frame1].clone(),
     ];
     log_frames(&recording, &key_frames);
+
+    // initialize focal length and undistorted p2d for init poses
     let (lambda, h_mat) = radial_distortion_homography(
         &detected_feature_frames[frame0],
         &detected_feature_frames[frame1],
     );
+    // focal
+    let f_option = homography_to_focal(&h_mat);
+    if f_option.is_none() {
+        return;
+    }
+    let focal = f_option.unwrap();
+
+    // poses
     let frame_feature0 = &detected_feature_frames[frame0];
     let frame_feature1 = &detected_feature_frames[frame1];
-    let half_w = frame_feature0.img_w_h.0 as f32 / 2.0;
-    let half_h = frame_feature0.img_w_h.1 as f32 / 2.0;
+    let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
+    let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
+
+    println!("rvec {:?}", rvec0);
+    println!("tvec {:?}", tvec0);
+
+    let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
+    let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
     let half_img_size = half_h.max(half_w);
-    let f_option = homography_to_focal(&h_mat);
-    if let Some(f) = f_option {
-        println!("f = {}", f * half_img_size)
-    }
-    let cxcy = glam::Vec2::new(half_w, half_h);
-    let normalized_undistort_frame_feauture0: Vec<_> = frame_feature0
-        .features
-        .iter()
-        .map(|f| {
-            let xy = (f.1.p2d - cxcy) / half_img_size;
-            let sc = 1.0 + lambda * (xy.x * xy.x + xy.y * xy.y);
-            (xy / sc * half_img_size, f.1.p3d)
-        })
-        .collect();
+    let init_f = focal as f64 * half_img_size;
+    let init_alpha = lambda.abs() as f64;
+    init_ucm(
+        frame_feature0,
+        frame_feature1,
+        &rvec0,
+        &tvec0,
+        &rvec1,
+        &tvec1,
+        init_f,
+        init_alpha,
+    );
+
     return;
-    let normalized_p2d_pairs: Vec<_> = frame_feature0
-        .features
-        .iter()
-        .filter_map(|(i, p0)| {
-            if let Some(p1) = frame_feature1.features.get(i) {
-                Some((
-                    (p0.p2d - cxcy) / half_img_size,
-                    (p1.p2d - cxcy) / half_img_size,
-                ))
-            } else {
-                None
-            }
-        })
-        .collect();
-    let mut pt0 = Vec::new();
-    let mut pt1 = Vec::new();
-    let mut colors = Vec::new();
-    for (p0, p1) in &normalized_p2d_pairs {
-        let color = (
-            rand::random::<u8>(),
-            rand::random::<u8>(),
-            rand::random::<u8>(),
-            255u8,
-        );
-        colors.push(color);
-        let x = p0.x;
-        let y = p0.y;
-        let sc = 1.0 + lambda * (x * x + y * y);
+    // let normalized_p2d_pairs: Vec<_> = frame_feature0
+    //     .features
+    //     .iter()
+    //     .filter_map(|(i, p0)| {
+    //         if let Some(p1) = frame_feature1.features.get(i) {
+    //             Some((
+    //                 (p0.p2d - cxcy) / half_img_size,
+    //                 (p1.p2d - cxcy) / half_img_size,
+    //             ))
+    //         } else {
+    //             None
+    //         }
+    //     })
+    //     .collect();
+    // let mut pt0 = Vec::new();
+    // let mut pt1 = Vec::new();
+    // let mut colors = Vec::new();
+    // for (p0, p1) in &normalized_p2d_pairs {
+    //     let color = (
+    //         rand::random::<u8>(),
+    //         rand::random::<u8>(),
+    //         rand::random::<u8>(),
+    //         255u8,
+    //     );
+    //     colors.push(color);
+    //     let x = p0.x;
+    //     let y = p0.y;
+    //     let sc = 1.0 + lambda * (x * x + y * y);
 
-        let pp0 = (
-            x / sc * half_img_size + half_w,
-            y / sc * half_img_size + half_h,
-        );
+    //     let pp0 = (
+    //         x / sc * half_img_size + half_w,
+    //         y / sc * half_img_size + half_h,
+    //     );
 
-        let x_p = p1.x;
-        let y_p = p1.y;
-        let sc_p = 1.0 + lambda * (x_p * x_p + y_p * y_p);
-        let pp1 = (
-            x_p / sc_p * half_img_size + half_w,
-            y_p / sc_p * half_img_size + half_h,
-        );
-        pt0.push(pp0);
-        pt1.push(pp1);
-    }
-    recording
-        .log(
-            "/pta0",
-            &rerun::Points2D::new(pt0).with_colors(colors.clone()),
-        )
-        .unwrap();
-    recording
-        .log("/pta1", &rerun::Points2D::new(pt1).with_colors(colors))
-        .unwrap();
+    //     let x_p = p1.x;
+    //     let y_p = p1.y;
+    //     let sc_p = 1.0 + lambda * (x_p * x_p + y_p * y_p);
+    //     let pp1 = (
+    //         x_p / sc_p * half_img_size + half_w,
+    //         y_p / sc_p * half_img_size + half_h,
+    //     );
+    //     pt0.push(pp0);
+    //     pt1.push(pp1);
+    // }
+    // recording
+    //     .log(
+    //         "/pta0",
+    //         &rerun::Points2D::new(pt0).with_colors(colors.clone()),
+    //     )
+    //     .unwrap();
+    // recording
+    //     .log("/pta1", &rerun::Points2D::new(pt1).with_colors(colors))
+    //     .unwrap();
 }
