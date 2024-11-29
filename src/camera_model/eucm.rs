@@ -2,7 +2,7 @@ use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct EUCM<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
@@ -31,6 +31,18 @@ impl<T: na::RealField + Clone> EUCM<T> {
     }
     pub fn from<U: na::RealField + Clone>(m: &EUCM<U>) -> EUCM<T> {
         EUCM::new(&m.cast(), m.width, m.height)
+    }
+    pub fn zeros() -> EUCM<T> {
+        EUCM {
+            fx: T::zero(),
+            fy: T::zero(),
+            cx: T::zero(),
+            cy: T::zero(),
+            alpha: T::from_f64(0.4).unwrap(),
+            beta: T::from_f64(1.0).unwrap(),
+            width: 0,
+            height: 0,
+        }
     }
 }
 
@@ -128,5 +140,10 @@ impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
 
     fn distortion_params(&self) -> nalgebra::DVector<T> {
         na::dvector![self.alpha.clone(), self.beta.clone()]
+    }
+
+    fn set_w_h(&mut self, w: u32, h: u32) {
+        self.width = w;
+        self.height = h;
     }
 }

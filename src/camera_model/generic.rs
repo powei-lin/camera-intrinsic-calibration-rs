@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
 use image::DynamicImage;
 use nalgebra as na;
@@ -5,7 +7,7 @@ use num_dual::DualDVec64;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum GenericModel<T: na::RealField> {
     EUCM(EUCM<T>),
     UCM(UCM<T>),
@@ -63,6 +65,7 @@ impl GenericModel<f64> {
     generic_impl_self!(height -> f64);
     generic_impl_self!(params -> na::DVector<f64>);
     generic_impl_self!(set_params, params: &na::DVector<f64>);
+    generic_impl_self!(set_w_h, w: u32, h: u32);
     generic_impl_self!(camera_params -> na::DVector<f64>);
     generic_impl_self!(distortion_params -> na::DVector<f64>);
     generic_impl_self!(project_one, na::Vector2<f64>, pt: &na::Vector3<f64>);
@@ -79,6 +82,20 @@ impl GenericModel<f64> {
             GenericModel::KannalaBrandt4(kannala_brandt4) => {
                 GenericModel::KannalaBrandt4(KannalaBrandt4::from(kannala_brandt4))
             }
+        }
+    }
+}
+
+impl FromStr for GenericModel<f64> {
+    type Err = std::fmt::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ucm" | "UCM" => Ok(GenericModel::UCM(UCM::zeros())),
+            "eucm" | "EUCM" => Ok(GenericModel::EUCM(EUCM::zeros())),
+            "kb4" | "KB4" => Ok(GenericModel::KannalaBrandt4(KannalaBrandt4::zeros())),
+            "opencv5" | "OPENCV5" => Ok(GenericModel::OpenCVModel5(OpenCVModel5::zeros())),
+            _ => Err(std::fmt::Error),
         }
     }
 }
@@ -171,6 +188,7 @@ where
     fn distortion_params(&self) -> na::DVector<T>;
     fn width(&self) -> T;
     fn height(&self) -> T;
+    fn set_w_h(&mut self, w: u32, h: u32);
     fn project_one(&self, pt: &na::Vector3<T>) -> na::Vector2<T>;
     fn project(&self, p3d: &[na::Vector3<T>]) -> Vec<Option<na::Vector2<T>>> {
         p3d.par_iter()

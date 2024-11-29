@@ -3,7 +3,7 @@ use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
-use camera_intrinsic::util::{init_ucm, rtvec_to_na_dvec};
+use camera_intrinsic::util::{convert_model, init_ucm, rtvec_to_na_dvec};
 use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
@@ -28,6 +28,10 @@ struct CCRSCli {
     /// tag_family: ["t16h5", "t25h7", "t25h9", "t36h11", "t36h11b1"]
     #[arg(value_enum, default_value = "t36h11")]
     tag_family: TagFamily,
+
+    /// model: ["ucm", "eucm", "kb4", "opencv5"]
+    #[arg(short, long, value_enum, default_value = "eucm")]
+    model: camera_intrinsic::camera_model::GenericModel<f64>,
 }
 
 fn log_frames(recording: &RecordingStream, detected_feature_frames: &[FrameFeature]) {
@@ -495,7 +499,7 @@ fn main() {
     let half_img_size = half_h.max(half_w);
     let init_f = focal as f64 * half_img_size;
     let init_alpha = lambda.abs() as f64;
-    init_ucm(
+    let initial_camera = init_ucm(
         frame_feature0,
         frame_feature1,
         &rvec0,
@@ -505,59 +509,12 @@ fn main() {
         init_f,
         init_alpha,
     );
-
-    return;
-    // let normalized_p2d_pairs: Vec<_> = frame_feature0
-    //     .features
-    //     .iter()
-    //     .filter_map(|(i, p0)| {
-    //         if let Some(p1) = frame_feature1.features.get(i) {
-    //             Some((
-    //                 (p0.p2d - cxcy) / half_img_size,
-    //                 (p1.p2d - cxcy) / half_img_size,
-    //             ))
-    //         } else {
-    //             None
-    //         }
-    //     })
-    //     .collect();
-    // let mut pt0 = Vec::new();
-    // let mut pt1 = Vec::new();
-    // let mut colors = Vec::new();
-    // for (p0, p1) in &normalized_p2d_pairs {
-    //     let color = (
-    //         rand::random::<u8>(),
-    //         rand::random::<u8>(),
-    //         rand::random::<u8>(),
-    //         255u8,
-    //     );
-    //     colors.push(color);
-    //     let x = p0.x;
-    //     let y = p0.y;
-    //     let sc = 1.0 + lambda * (x * x + y * y);
-
-    //     let pp0 = (
-    //         x / sc * half_img_size + half_w,
-    //         y / sc * half_img_size + half_h,
-    //     );
-
-    //     let x_p = p1.x;
-    //     let y_p = p1.y;
-    //     let sc_p = 1.0 + lambda * (x_p * x_p + y_p * y_p);
-    //     let pp1 = (
-    //         x_p / sc_p * half_img_size + half_w,
-    //         y_p / sc_p * half_img_size + half_h,
-    //     );
-    //     pt0.push(pp0);
-    //     pt1.push(pp1);
-    // }
-    // recording
-    //     .log(
-    //         "/pta0",
-    //         &rerun::Points2D::new(pt0).with_colors(colors.clone()),
-    //     )
-    //     .unwrap();
-    // recording
-    //     .log("/pta1", &rerun::Points2D::new(pt1).with_colors(colors))
-    //     .unwrap();
+    let mut final_model = cli.model;
+    final_model.set_w_h(
+        initial_camera.width().round() as u32,
+        initial_camera.height().round() as u32,
+    );
+    println!("{:?}", final_model);
+    convert_model(&initial_camera, &mut final_model);
+    println!("{:?}", final_model);
 }

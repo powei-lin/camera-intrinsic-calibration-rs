@@ -2,7 +2,7 @@ use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct OpenCVModel5<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
@@ -31,6 +31,21 @@ impl<T: na::RealField + Clone> OpenCVModel5<T> {
             k3: params[8].clone(),
             width,
             height,
+        }
+    }
+    pub fn zeros() -> OpenCVModel5<T> {
+        OpenCVModel5 {
+            fx: T::zero(),
+            fy: T::zero(),
+            cx: T::zero(),
+            cy: T::zero(),
+            k1: T::zero(),
+            k2: T::zero(),
+            p1: T::zero(),
+            p2: T::zero(),
+            k3: T::zero(),
+            width: 0,
+            height: 0,
         }
     }
     fn rd(&self, r: &T) -> T {
@@ -183,5 +198,9 @@ impl<T: na::RealField + Clone> CameraModel<T> for OpenCVModel5<T> {
             self.p2.clone(),
             self.k3.clone()
         ]
+    }
+    fn set_w_h(&mut self, w: u32, h: u32) {
+        self.width = w;
+        self.height = h;
     }
 }

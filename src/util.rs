@@ -301,7 +301,7 @@ pub fn init_ucm(
     tvec1: &na::DVector<f64>,
     init_f: f64,
     init_alpha: f64,
-) {
+) -> GenericModel<f64> {
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
     let init_params = na::dvector![init_f, init_f, half_w, half_h, init_alpha];
@@ -371,48 +371,14 @@ pub fn init_ucm(
         &[frame_feature0.clone(), frame_feature1.clone()],
         &ucm_camera,
         Some(second_round_values),
-    );
-    // second_round_values.insert("all_params".to_string(), ucm_all_params);
-    // let mut ucm_all_problem = tiny_solver::Problem::new();
-
-    // for (_, fp) in &frame_feature0.features {
-    //     let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
-    //     ucm_all_problem.add_residual_block(
-    //         2,
-    //         vec![
-    //             ("all_params".to_string(), 5),
-    //             ("rvec0".to_string(), 3),
-    //             ("tvec0".to_string(), 3),
-    //         ],
-    //         Box::new(cost),
-    //         Some(Box::new(HuberLoss::new(1.0))),
-    //     );
-    // }
-
-    // for (_, fp) in &frame_feature1.features {
-    //     let cost = ReprojectionFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
-    //     ucm_all_problem.add_residual_block(
-    //         2,
-    //         vec![
-    //             ("all_params".to_string(), 5),
-    //             ("rvec1".to_string(), 3),
-    //             ("tvec1".to_string(), 3),
-    //         ],
-    //         Box::new(cost),
-    //         Some(Box::new(HuberLoss::new(1.0))),
-    //     );
-    // }
-    // let result = optimizer.optimize(&ucm_all_problem, &second_round_values, None);
-    // println!("{:?}", result);
-    // save result
-    // let result_params = result.get("x").unwrap();
+    )
 }
 
 pub fn calib_camera(
     frame_feature_list: &[FrameFeature],
     generic_camera: &GenericModel<f64>,
     initial_values_option: Option<HashMap<String, na::DVector<f64>>>,
-) {
+) -> GenericModel<f64> {
     let params = generic_camera.params();
     let params_len = params.len();
     let mut problem = tiny_solver::Problem::new();
@@ -478,7 +444,11 @@ pub fn calib_camera(
     let initial_values = optimizer.optimize(&problem, &initial_values, None);
     problem.unfix_variable("params");
     let result = optimizer.optimize(&problem, &initial_values, None);
-    println!("params {}", result.get("params").unwrap());
+    let new_params = result.get("params").unwrap();
+    println!("params {}", new_params);
     println!("params {}", result.get("rvec0").unwrap());
     println!("params {}", result.get("rvec1").unwrap());
+    let mut calibrated_camera = generic_camera.clone();
+    calibrated_camera.set_params(&new_params);
+    calibrated_camera
 }

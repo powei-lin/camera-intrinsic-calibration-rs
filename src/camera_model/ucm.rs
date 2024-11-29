@@ -2,7 +2,7 @@ use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct UCM<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
@@ -29,6 +29,17 @@ impl<T: na::RealField + Clone> UCM<T> {
     }
     pub fn from<U: na::RealField + Clone>(m: &UCM<U>) -> UCM<T> {
         UCM::new(&m.cast(), m.width, m.height)
+    }
+    pub fn zeros() -> UCM<T> {
+        UCM {
+            fx: T::zero(),
+            fy: T::zero(),
+            cx: T::zero(),
+            cy: T::zero(),
+            alpha: T::from_f64(0.2).unwrap(),
+            width: 0,
+            height: 0,
+        }
     }
 }
 
@@ -124,5 +135,9 @@ impl<T: na::RealField + Clone> CameraModel<T> for UCM<T> {
 
     fn distortion_params(&self) -> nalgebra::DVector<T> {
         na::dvector![self.alpha.clone()]
+    }
+    fn set_w_h(&mut self, w: u32, h: u32) {
+        self.width = w;
+        self.height = h;
     }
 }

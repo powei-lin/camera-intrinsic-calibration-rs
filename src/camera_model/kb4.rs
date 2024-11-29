@@ -2,7 +2,7 @@ use super::generic::{CameraModel, ModelCast};
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Copy, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]
 pub struct KannalaBrandt4<T: na::RealField + Clone> {
     pub fx: T,
     pub fy: T,
@@ -29,6 +29,20 @@ impl<T: na::RealField + Clone> KannalaBrandt4<T> {
             k4: params[7].clone(),
             width,
             height,
+        }
+    }
+    pub fn zeros() -> KannalaBrandt4<T> {
+        KannalaBrandt4 {
+            fx: T::zero(),
+            fy: T::zero(),
+            cx: T::zero(),
+            cy: T::zero(),
+            k1: T::zero(),
+            k2: T::zero(),
+            k3: T::zero(),
+            k4: T::zero(),
+            width: 0,
+            height: 0,
         }
     }
     fn f(k1: &T, k2: &T, k3: &T, k4: &T, theta: &T) -> T {
@@ -161,5 +175,9 @@ impl<T: na::RealField + Clone> CameraModel<T> for KannalaBrandt4<T> {
             self.k3.clone(),
             self.k4.clone()
         ]
+    }
+    fn set_w_h(&mut self, w: u32, h: u32) {
+        self.width = w;
+        self.height = h;
     }
 }

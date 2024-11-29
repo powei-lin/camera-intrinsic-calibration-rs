@@ -9,13 +9,6 @@ use rand;
 
 fn main() {
     env_logger::init();
-    // let mat = faer::mat::Mat::from_fn(8, 6, |_, _|{random::<f64>()});
-    // let q = mat.qr().compute_q();
-    // let n = q.col(7).transpose();
-    // println!("{}", n.norm_l2());
-    // let mm = n * mat;
-    // println!("{:?}", mm);
-    // return;
     let img = ImageReader::open("data/tum_vi_with_chart.png")
         .unwrap()
         .decode()
