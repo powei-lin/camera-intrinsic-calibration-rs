@@ -425,6 +425,7 @@ pub fn calib_camera(
     println!("init {:?}", initial_values);
 
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
+        println!("f{}", i);
         let mut p3ds = Vec::new();
         let mut p2ds = Vec::new();
         let rvec_name = format!("rvec{}", i);
@@ -462,6 +463,7 @@ pub fn calib_camera(
         }
         let (rvec, tvec) =
             rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
+        println!("rvec pnp {}", rvec);
         if !initial_values.contains_key(&rvec_name) {
             initial_values.insert(rvec_name, rvec);
         }
@@ -471,6 +473,12 @@ pub fn calib_camera(
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    problem.fix_variable("params", 2);
+    problem.fix_variable("params", 3);
+    let initial_values = optimizer.optimize(&problem, &initial_values, None);
+    problem.unfix_variable("params");
     let result = optimizer.optimize(&problem, &initial_values, None);
     println!("params {}", result.get("params").unwrap());
+    println!("params {}", result.get("rvec0").unwrap());
+    println!("params {}", result.get("rvec1").unwrap());
 }

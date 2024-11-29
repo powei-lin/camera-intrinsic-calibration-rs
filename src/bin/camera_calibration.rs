@@ -68,6 +68,19 @@ fn features_avg_center(features: &HashMap<u32, FeaturePoint>) -> glam::Vec2 {
         .unwrap()
         / features.len() as f32
 }
+fn features_covered_area(features: &HashMap<u32, FeaturePoint>) -> f32 {
+    let (xmin, ymin, xmax, ymax) = features.iter().map(|(_, p)| p.p2d).fold(
+        (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+        |acc, e| {
+            let xmin = acc.0.min(e.x);
+            let ymin = acc.1.min(e.y);
+            let xmax = acc.0.max(e.x);
+            let ymax = acc.1.max(e.y);
+            (xmin, ymin, xmax, ymax)
+        },
+    );
+    (xmax - xmin) * (ymax - ymin)
+}
 
 fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
     let v = v0 - v1;
@@ -85,7 +98,7 @@ fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usi
             max_detection_idxs.push(i);
         }
     }
-    let mut v: Vec<_> = max_detection_idxs
+    let mut v0: Vec<_> = max_detection_idxs
         .iter()
         .map(|i| {
             let p_avg = features_avg_center(&detected_feature_frames[*i].features);
@@ -93,14 +106,24 @@ fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usi
         })
         .collect();
 
-    let avg_all = v.iter().map(|(_, p)| *p).reduce(|acc, e| acc + e).unwrap() / v.len() as f32;
+    let avg_all = v0.iter().map(|(_, p)| *p).reduce(|acc, e| acc + e).unwrap() / v0.len() as f32;
     // let avg_all = Vec2::ZERO;
-    v.sort_by(|a, b| {
+    v0.sort_by(|a, b| {
         vec2_distance2(&a.1, &avg_all)
             .partial_cmp(&vec2_distance2(&b.1, &avg_all))
             .unwrap()
     });
-    (*v[0].0, *v.last().unwrap().0)
+    let mut v1: Vec<_> = max_detection_idxs
+        .iter()
+        .map(|&i| {
+            let area = features_covered_area(&detected_feature_frames[i].features);
+            (i, area)
+        })
+        .collect();
+    v1.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+    (*v0[0].0, *v0.last().unwrap().0)
+    // (v1.last().unwrap().0, *v0.last().unwrap().0)
 }
 
 fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na::Matrix3<f32>)> {
@@ -232,7 +255,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         //  all valid
         let s0 = ((l_l_p[(0, 0)] / l_l_p[(0, 1)]).log10()).abs();
         let s1 = ((l_l_p[(1, 0)] / l_l_p[(1, 1)]).log10()).abs();
-        if (s1 != s1 || s0 < s1) {
+        if (s0 < s1) {
             which_l = 0;
         } else {
             which_l = 1;
