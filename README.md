@@ -16,7 +16,9 @@ ccrs -h
 # run intrinsic calibration on TUM vi dataset
 # Download and untar
 wget https://vision.in.tum.de/tumvi/exported/euroc/1024_16/dataset-calib-cam1_1024_16.tar
+tar xvzf dataset-calib-cam1_1024_16.tar
 
+# [Optional] export RUST_LOG=trace
 ccrs dataset-calib-cam1_1024_16 --model eucm
 ```
 
