@@ -1,21 +1,13 @@
 use aprilgrid::detector::TagDetector;
 use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
-use camera_intrinsic::camera_model::{model_to_json, GenericModel, UCM};
+use camera_intrinsic::camera_model::model_to_json;
 use camera_intrinsic::data_loader::load_euroc;
-use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
 use camera_intrinsic::optimization::*;
 use camera_intrinsic::util::*;
 use camera_intrinsic::visualization::*;
 use clap::Parser;
-use core::f32;
-use faer::solvers::SpSolverLstsq;
-use log::{debug, trace};
-use nalgebra as na;
-use rand::seq::SliceRandom;
-use rerun::RecordingStream;
-use sqpnp_simple::sqpnp_solve_glam;
-use std::collections::HashMap;
+use log::trace;
 use std::time::Instant;
 
 #[derive(Parser)]
