@@ -540,7 +540,7 @@ fn main() {
     //     367.122,
     //     246.741,
     //     0.67485], 752, 480));
-    let (final_result, rtvec_list) = calib_camera(&detected_feature_frames, &final_model, None);
+    let (final_result, rtvec_list) = calib_camera(&detected_feature_frames, &final_model);
     println!("{:?}", final_result);
     model_to_json("output.json", &final_result);
 }

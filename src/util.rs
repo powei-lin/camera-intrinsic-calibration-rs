@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
-use crate::camera_model::CameraModel;
 use crate::detected_points::FrameFeature;
 
 use super::camera_model::generic::GenericModel;
-use super::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
+use super::camera_model::UCM;
+use super::optimization::factors::*;
 use log::debug;
-use nalgebra::{self as na, Const, Dyn};
-use num_dual::DualDVec64;
-use tiny_solver::factors::Factor;
+use nalgebra as na;
 use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
 
@@ -21,81 +19,16 @@ pub fn rtvec_to_na_dvec(
     )
 }
 
-#[derive(Clone)]
-pub struct ModelConvertFactor {
-    pub source: GenericModel<DualDVec64>,
-    pub target: GenericModel<DualDVec64>,
-    pub p3ds: Vec<na::Vector3<DualDVec64>>,
-}
-
-impl ModelConvertFactor {
-    pub fn new(
-        source: &GenericModel<f64>,
-        target: &GenericModel<f64>,
-        edge_pixels: u32,
-        steps: usize,
-    ) -> ModelConvertFactor {
-        if source.width().round() as u32 != target.width().round() as u32 {
-            panic!("source width and target width are not the same.")
-        } else if source.height().round() as u32 != target.height().round() as u32 {
-            panic!("source height and target height are not the same.")
-        }
-        let mut p2ds = Vec::new();
-        for r in (edge_pixels..source.height() as u32 - edge_pixels).step_by(steps) {
-            for c in (edge_pixels..source.width() as u32 - edge_pixels).step_by(steps) {
-                p2ds.push(na::Vector2::new(c as f64, r as f64));
-            }
-        }
-        let p3ds = source.unproject(&p2ds);
-        let p3ds: Vec<_> = p3ds
-            .iter()
-            .filter_map(|p| p.as_ref().map(|pp| pp.cast()))
-            .collect();
-        ModelConvertFactor {
-            source: source.cast(),
-            target: target.cast(),
-            p3ds,
-        }
-    }
-    pub fn residaul_num(&self) -> usize {
-        self.p3ds.len() * 2
-    }
-}
-
-impl Factor for ModelConvertFactor {
-    fn residual_func(
-        &self,
-        params: &[nalgebra::DVector<num_dual::DualDVec64>],
-    ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&params[0], m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&params[0], m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&params[0], m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
-            }
-        };
-        let p2ds0 = self.source.project(&self.p3ds);
-        let p2ds1 = model.project(&self.p3ds);
-        let diff: Vec<_> = p2ds0
-            .iter()
-            .zip(p2ds1)
-            .flat_map(|(p0, p1)| {
-                if let Some(p0) = p0 {
-                    if let Some(p1) = p1 {
-                        let pp = p0 - p1;
-                        return vec![pp[0].clone(), pp[1].clone()];
-                    }
-                }
-                vec![
-                    num_dual::DualDVec64::from_re(0.0),
-                    num_dual::DualDVec64::from_re(0.0),
-                ]
-            })
-            .collect();
-        na::DVector::from_vec(diff)
+fn set_problem_parameter_bound(
+    problem: &mut tiny_solver::Problem,
+    generic_camera: &GenericModel<f64>,
+) {
+    problem.set_variable_bounds("params", 0, 0.0, 10000.0);
+    problem.set_variable_bounds("params", 1, 0.0, 10000.0);
+    problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
+    problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
+    for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
+        problem.set_variable_bounds("params", distortion_idx, lower, upper);
     }
 }
 
@@ -120,177 +53,15 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
+    // distortion parameter bound
+    set_problem_parameter_bound(&mut problem, &target_model);
+
     // optimize
     let result = optimizer.optimize(&problem, &initial_values, None);
 
     // save result
     let result_params = result.get("x").unwrap();
     target_model.set_params(result_params);
-}
-
-pub struct CustomFactor {
-    p2d0: na::Vector2<DualDVec64>,
-    p2d1: na::Vector2<DualDVec64>,
-    img_w: u32,
-    img_h: u32,
-}
-
-impl CustomFactor {
-    pub fn new(p2d0v: &glam::Vec2, p2d1v: &glam::Vec2, img_w: u32, img_h: u32) -> CustomFactor {
-        let p2d0 = na::Vector2::new(
-            DualDVec64::from_re(p2d0v.x as f64),
-            DualDVec64::from_re(p2d0v.y as f64),
-        );
-        let p2d1 = na::Vector2::new(
-            DualDVec64::from_re(p2d1v.x as f64),
-            DualDVec64::from_re(p2d1v.y as f64),
-        );
-        CustomFactor {
-            p2d0,
-            p2d1,
-            img_w,
-            img_h,
-        }
-    }
-}
-
-impl Factor for CustomFactor {
-    fn residual_func(
-        &self,
-        params: &[nalgebra::DVector<num_dual::DualDVec64>],
-    ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        // let f = params[0][0].clone();
-        // let alpha = params[0][1].clone();
-        let f = DualDVec64::from_re(189.0);
-        let alpha = DualDVec64::from_re(0.6);
-        let cx = DualDVec64::from_re(self.img_w as f64 / 2.0);
-        let cy = DualDVec64::from_re(self.img_h as f64 / 2.0);
-        let new_params = na::dvector![f.clone(), f, cx, cy, alpha];
-        let ucm = UCM::new(&new_params, self.img_w, self.img_h);
-        let h_flat = params[0].push(DualDVec64::from_re(1.0));
-        let h = h_flat.reshape_generic(Const::<3>, Dyn(3));
-        let p3d0 = ucm.unproject_one(&self.p2d0);
-        let p3d1 = h * p3d0;
-        let p2d1p = ucm.project_one(&p3d1);
-        let diff = p2d1p - self.p2d1.clone();
-        na::dvector![diff[0].clone(), diff[1].clone()]
-    }
-}
-
-struct UCMInitFocalAlphaFactor {
-    pub target: GenericModel<DualDVec64>,
-    pub p3d: na::Point3<DualDVec64>,
-    pub p2d: na::Vector2<DualDVec64>,
-}
-
-impl UCMInitFocalAlphaFactor {
-    pub fn new(
-        target: &GenericModel<f64>,
-        p3d: &glam::Vec3,
-        p2d: &glam::Vec2,
-    ) -> UCMInitFocalAlphaFactor {
-        let target = target.cast();
-        let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
-        let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
-        UCMInitFocalAlphaFactor { target, p3d, p2d }
-    }
-}
-impl Factor for UCMInitFocalAlphaFactor {
-    fn residual_func(
-        &self,
-        params: &[nalgebra::DVector<num_dual::DualDVec64>],
-    ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        // params[[f, alpha], rvec, tvec]
-        let mut cam_params = self.target.params();
-        cam_params[0] = params[0][0].clone();
-        cam_params[1] = params[0][0].clone();
-        cam_params[4] = params[0][1].clone();
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&cam_params, m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&cam_params, m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&cam_params, m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&cam_params, m.width, m.height))
-            }
-        };
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
-        let transform = na::Isometry3::new(tvec, rvec);
-        let p3d_t = transform * self.p3d.clone();
-        let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
-        let p2d_p = model.project_one(&p3d_t);
-
-        na::dvector![
-            p2d_p[0].clone() - self.p2d[0].clone(),
-            p2d_p[1].clone() - self.p2d[1].clone()
-        ]
-    }
-}
-
-struct ReprojectionFactor {
-    pub target: GenericModel<DualDVec64>,
-    pub p3d: na::Point3<DualDVec64>,
-    pub p2d: na::Vector2<DualDVec64>,
-}
-
-impl ReprojectionFactor {
-    pub fn new(
-        target: &GenericModel<f64>,
-        p3d: &glam::Vec3,
-        p2d: &glam::Vec2,
-    ) -> ReprojectionFactor {
-        let target = target.cast();
-        let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
-        let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
-        ReprojectionFactor { target, p3d, p2d }
-    }
-}
-impl Factor for ReprojectionFactor {
-    fn residual_func(
-        &self,
-        params: &[nalgebra::DVector<num_dual::DualDVec64>],
-    ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        // params[params, rvec, tvec]
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&params[0], m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&params[0], m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&params[0], m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
-            }
-        };
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
-        let transform = na::Isometry3::new(tvec, rvec);
-        let p3d_t = transform * self.p3d.clone();
-        let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
-        let p2d_p = model.project_one(&p3d_t);
-
-        na::dvector![
-            p2d_p[0].clone() - self.p2d[0].clone(),
-            p2d_p[1].clone() - self.p2d[1].clone()
-        ]
-    }
 }
 
 pub fn init_ucm(
@@ -435,10 +206,10 @@ pub fn calib_camera(
                 }
             })
             .unzip();
-        if p3ds.len() < 6 {
-            println!("skip frame {}", i);
-            continue;
-        }
+        // if p3ds.len() < 6 {
+        //     println!("skip frame {}", i);
+        //     continue;
+        // }
         valid_indexes.push(i);
         let (rvec, tvec) =
             rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
@@ -453,13 +224,8 @@ pub fn calib_camera(
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
     let initial_values = optimizer.optimize(&problem, &initial_values, None);
-    problem.set_variable_bounds("params", 0, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 1, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
-    problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
-    for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
-        problem.set_variable_bounds("params", distortion_idx, lower, upper);
-    }
+
+    set_problem_parameter_bound(&mut problem, &generic_camera);
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
     let new_params = result.get("params").unwrap();
