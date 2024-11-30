@@ -416,7 +416,7 @@ pub fn calib_camera(
     println!("init {:?}", initial_values);
     let mut valid_indexes = Vec::new();
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
-        println!("f{}", i);
+        // println!("f{}", i);
         let mut p3ds = Vec::new();
         let mut p2ds = Vec::new();
         let rvec_name = format!("rvec{}", i);
@@ -480,13 +480,6 @@ pub fn calib_camera(
     problem.set_variable_bounds("params", 1, 0.0, 10000.0);
     problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
     problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
-    // problem.fix_variable("params", 0);
-    // problem.fix_variable("params", 1);
-    // problem.fix_variable("params", 2);
-    // problem.fix_variable("params", 3);
-    // problem.fix_variable("params", 4);
-    let mut initial_values = optimizer.optimize(&problem, &initial_values, None);
-    problem.unfix_variable("params");
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
     let new_params = result.get("params").unwrap();

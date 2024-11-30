@@ -9,7 +9,6 @@ use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
 use faer::solvers::SpSolverLstsq;
-use glam::Vec2;
 use log::trace;
 use nalgebra as na;
 use rand::seq::SliceRandom;
@@ -17,8 +16,6 @@ use rerun::RecordingStream;
 use sqpnp_simple::sqpnp_solve_glam;
 use std::collections::HashMap;
 use std::time::Instant;
-use tiny_solver::loss_functions::HuberLoss;
-use tiny_solver::Optimizer;
 
 #[derive(Parser)]
 #[command(version, about, author)]
@@ -27,12 +24,21 @@ struct CCRSCli {
     path: String,
 
     /// tag_family: ["t16h5", "t25h7", "t25h9", "t36h11", "t36h11b1"]
-    #[arg(value_enum, default_value = "t36h11")]
+    #[arg(long, value_enum, default_value = "t36h11")]
     tag_family: TagFamily,
 
     /// model: ["ucm", "eucm", "kb4", "opencv5"]
     #[arg(short, long, value_enum, default_value = "eucm")]
     model: camera_intrinsic::camera_model::GenericModel<f64>,
+
+    #[arg(long, default_value_t = 0)]
+    start_idx: usize,
+
+    #[arg(long, default_value_t = 1)]
+    step: usize,
+
+    #[arg(long, default_value_t = 600)]
+    max_images: usize,
 }
 
 fn log_frames(recording: &RecordingStream, detected_feature_frames: &[FrameFeature]) {
@@ -459,8 +465,15 @@ fn main() {
         .save("output.rrd")
         .unwrap();
     trace!("Start loading data");
-    let mut detected_feature_frames = load_euroc(dataset_root, &detector, &board, None);
-    detected_feature_frames.truncate(200);
+    let mut detected_feature_frames = load_euroc(
+        dataset_root,
+        &detector,
+        &board,
+        cli.start_idx,
+        cli.step,
+        Some(&recording),
+    );
+    detected_feature_frames.truncate(cli.max_images);
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
     println!(

@@ -25,10 +25,14 @@ pub fn load_euroc(
     root_folder: &str,
     tag_detector: &TagDetector,
     board: &board::Board,
+    start_idx: usize,
+    step: usize,
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<FrameFeature> {
     let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
     img_paths
+        .skip(start_idx)
+        .step_by(step)
         .par_bridge()
         .filter_map(|path| {
             let path = path.unwrap();
