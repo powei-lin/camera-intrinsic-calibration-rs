@@ -1,9 +1,10 @@
 use aprilgrid::detector::TagDetector;
 use aprilgrid::TagFamily;
 use camera_intrinsic::board::create_default_6x6_board;
+use camera_intrinsic::camera_model::{model_to_json, GenericModel, UCM};
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::detected_points::{FeaturePoint, FrameFeature};
-use camera_intrinsic::util::{convert_model, init_ucm, rtvec_to_na_dvec};
+use camera_intrinsic::util::{calib_camera, convert_model, init_ucm, rtvec_to_na_dvec};
 use camera_intrinsic::visualization::*;
 use clap::Parser;
 use core::f32;
@@ -126,8 +127,8 @@ fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usi
         .collect();
     v1.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-    (*v0[0].0, *v0.last().unwrap().0)
-    // (v1.last().unwrap().0, *v0.last().unwrap().0)
+    // (*v0[0].0, *v0.last().unwrap().0)
+    (v1.last().unwrap().0, *v0.last().unwrap().0)
 }
 
 fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na::Matrix3<f32>)> {
@@ -458,7 +459,8 @@ fn main() {
         .save("output.rrd")
         .unwrap();
     trace!("Start loading data");
-    let detected_feature_frames = load_euroc(dataset_root, &detector, &board, None);
+    let mut detected_feature_frames = load_euroc(dataset_root, &detector, &board, None);
+    detected_feature_frames.truncate(200);
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
     println!(
@@ -484,6 +486,7 @@ fn main() {
         return;
     }
     let focal = f_option.unwrap();
+    println!("focal {}", focal);
 
     // poses
     let frame_feature0 = &detected_feature_frames[frame0];
@@ -498,6 +501,7 @@ fn main() {
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
     let half_img_size = half_h.max(half_w);
     let init_f = focal as f64 * half_img_size;
+    println!("init f {}", init_f);
     let init_alpha = lambda.abs() as f64;
     let initial_camera = init_ucm(
         frame_feature0,
@@ -517,4 +521,13 @@ fn main() {
     println!("{:?}", final_model);
     convert_model(&initial_camera, &mut final_model);
     println!("{:?}", final_model);
+    // return;
+    // let final_model = GenericModel::UCM(UCM::new(&na::dvector![471.019,
+    //     470.243,
+    //     367.122,
+    //     246.741,
+    //     0.67485], 752, 480));
+    let (final_result, rtvec_list) = calib_camera(&detected_feature_frames, &final_model, None);
+    println!("{:?}", final_result);
+    model_to_json("output.json", &final_result);
 }

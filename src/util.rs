@@ -304,6 +304,13 @@ pub fn init_ucm(
 ) -> GenericModel<f64> {
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
+    // let init_f = 471.0;
+    // let init_alpha = 0.67;
+    //     471.019
+    // 470.243
+    // 367.122
+    // 246.741
+    // 0.67485
     let init_params = na::dvector![init_f, init_f, half_w, half_h, init_alpha];
     let ucm_init_model = GenericModel::UCM(UCM::new(
         &init_params,
@@ -353,11 +360,28 @@ pub fn init_ucm(
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
+    println!("init ucm init f {}", initial_values.get("params").unwrap());
+    println!("init rvec0{}", initial_values.get("rvec0").unwrap());
+    println!("init tvec0{}", initial_values.get("tvec0").unwrap());
+    println!("init rvec1{}", initial_values.get("rvec1").unwrap());
+    println!("init tvec1{}", initial_values.get("tvec1").unwrap());
+
     // optimize
+    init_focal_alpha_problem.set_variable_bounds("params", 0, init_f / 3.0, init_f * 3.0);
+    init_focal_alpha_problem.set_variable_bounds("params", 1, 1e-6, 1.0);
     let mut second_round_values =
         optimizer.optimize(&init_focal_alpha_problem, &initial_values, None);
 
-    println!("{:?}\n", second_round_values);
+    println!(
+        "params after {:?}\n",
+        second_round_values.get("params").unwrap()
+    );
+    println!("after rvec0{}", second_round_values.get("rvec0").unwrap());
+    println!("after tvec0{}", second_round_values.get("tvec0").unwrap());
+    println!("after rvec1{}", second_round_values.get("rvec1").unwrap());
+    println!("after tvec1{}", second_round_values.get("tvec1").unwrap());
+    // panic!("stop");
+
     let focal = second_round_values["params"][0];
     let alpha = second_round_values["params"][1];
     let ucm_all_params = na::dvector![focal, focal, half_w, half_h, alpha];
@@ -372,13 +396,14 @@ pub fn init_ucm(
         &ucm_camera,
         Some(second_round_values),
     )
+    .0
 }
 
 pub fn calib_camera(
     frame_feature_list: &[FrameFeature],
     generic_camera: &GenericModel<f64>,
     initial_values_option: Option<HashMap<String, na::DVector<f64>>>,
-) -> GenericModel<f64> {
+) -> (GenericModel<f64>, Vec<(na::DVector<f64>, na::DVector<f64>)>) {
     let params = generic_camera.params();
     let params_len = params.len();
     let mut problem = tiny_solver::Problem::new();
@@ -389,7 +414,7 @@ pub fn calib_camera(
         HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)])
     };
     println!("init {:?}", initial_values);
-
+    let mut valid_indexes = Vec::new();
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
         println!("f{}", i);
         let mut p3ds = Vec::new();
@@ -427,9 +452,20 @@ pub fn calib_camera(
             println!("skip frame {}", i);
             continue;
         }
+        valid_indexes.push(i);
         let (rvec, tvec) =
             rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
-        println!("rvec pnp {}", rvec);
+        // let tt = na::Vector3::new(tvec[0], tvec[1], tvec[2]);
+        // let rr = na::Vector3::new(rvec[0], rvec[1], rvec[2]);
+        // let rt = na::Isometry3::new(tt, rr);
+        // if p3ds.iter().map(|p|{
+        //     let pp = na::Point3::new(p.x as f64, p.y as f64, p.z as f64);
+        //     let z = (rt * pp).z;
+        //     z
+        // }).any(|z| z < 0.0){
+        //     continue;
+        // }
+        // println!("rvec pnp {}", rvec);
         if !initial_values.contains_key(&rvec_name) {
             initial_values.insert(rvec_name, rvec);
         }
@@ -439,16 +475,34 @@ pub fn calib_camera(
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
-    problem.fix_variable("params", 2);
-    problem.fix_variable("params", 3);
     let initial_values = optimizer.optimize(&problem, &initial_values, None);
+    problem.set_variable_bounds("params", 0, 0.0, 10000.0);
+    problem.set_variable_bounds("params", 1, 0.0, 10000.0);
+    problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
+    problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
+    // problem.fix_variable("params", 0);
+    // problem.fix_variable("params", 1);
+    // problem.fix_variable("params", 2);
+    // problem.fix_variable("params", 3);
+    // problem.fix_variable("params", 4);
+    let mut initial_values = optimizer.optimize(&problem, &initial_values, None);
     problem.unfix_variable("params");
-    let result = optimizer.optimize(&problem, &initial_values, None);
+    let mut result = optimizer.optimize(&problem, &initial_values, None);
+
     let new_params = result.get("params").unwrap();
     println!("params {}", new_params);
-    println!("params {}", result.get("rvec0").unwrap());
-    println!("params {}", result.get("rvec1").unwrap());
     let mut calibrated_camera = generic_camera.clone();
     calibrated_camera.set_params(&new_params);
-    calibrated_camera
+    let rtvec_vec: Vec<_> = valid_indexes
+        .iter()
+        .map(|&i| {
+            let rvec_name = format!("rvec{}", i);
+            let tvec_name = format!("tvec{}", i);
+            (
+                result.remove(&rvec_name).unwrap(),
+                result.remove(&tvec_name).unwrap(),
+            )
+        })
+        .collect();
+    (calibrated_camera, rtvec_vec)
 }

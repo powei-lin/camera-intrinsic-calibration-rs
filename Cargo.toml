@@ -31,7 +31,8 @@ rerun = "0.17.0"
 serde = "1.0.215"
 serde_json = "1.0.133"
 sqpnp_simple = "0.1.2"
-tiny-solver = "0.9.1"
+# tiny-solver = "0.9.1"
+tiny-solver = {path = "/Users/powei/code/rust/tiny-solver-rs"}
 
 [[bin]]
 name = "ccrs"

@@ -30,7 +30,7 @@ pub fn load_euroc(
     let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
     img_paths
         .par_bridge()
-        .map(|path| {
+        .filter_map(|path| {
             let path = path.unwrap();
             let time_ns = path_to_timestamp(&path);
             let img = ImageReader::open(&path).unwrap().decode().unwrap();
@@ -56,10 +56,14 @@ pub fn load_euroc(
                         .collect::<Vec<_>>()
                 })
                 .collect();
-            FrameFeature {
-                time_ns,
-                img_w_h: (img.width(), img.height()),
-                features: tags_expand_ids,
+            if tags_expand_ids.len() < 24 {
+                None
+            } else {
+                Some(FrameFeature {
+                    time_ns,
+                    img_w_h: (img.width(), img.height()),
+                    features: tags_expand_ids,
+                })
             }
         })
         .collect()
