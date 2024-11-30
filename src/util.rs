@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
+use crate::types::RvecTvec;
 
 use super::camera_model::generic::GenericModel;
 use super::camera_model::UCM;
@@ -141,10 +142,8 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
 pub fn init_ucm(
     frame_feature0: &FrameFeature,
     frame_feature1: &FrameFeature,
-    rvec0: &na::DVector<f64>,
-    tvec0: &na::DVector<f64>,
-    rvec1: &na::DVector<f64>,
-    tvec1: &na::DVector<f64>,
+    rtvec0: &RvecTvec,
+    rtvec1: &RvecTvec,
     init_f: f64,
     init_alpha: f64,
 ) -> GenericModel<f64> {
@@ -190,10 +189,10 @@ pub fn init_ucm(
 
     let initial_values = HashMap::<String, na::DVector<f64>>::from([
         ("params".to_string(), init_f_alpha),
-        ("rvec0".to_string(), rvec0.clone()),
-        ("tvec0".to_string(), tvec0.clone()),
-        ("rvec1".to_string(), rvec1.clone()),
-        ("tvec1".to_string(), tvec1.clone()),
+        ("rvec0".to_string(), rtvec0.rvec.clone()),
+        ("tvec0".to_string(), rtvec0.tvec.clone()),
+        ("rvec1".to_string(), rtvec1.rvec.clone()),
+        ("tvec1".to_string(), rtvec1.tvec.clone()),
     ]);
 
     // initialize optimizer
@@ -237,12 +236,10 @@ pub fn init_ucm(
     .0
 }
 
-pub type RTvecList = Vec<(na::DVector<f64>, na::DVector<f64>)>;
-
 pub fn calib_camera(
     frame_feature_list: &[FrameFeature],
     generic_camera: &GenericModel<f64>,
-) -> (GenericModel<f64>, RTvecList) {
+) -> (GenericModel<f64>, Vec<RvecTvec>) {
     let params = generic_camera.params();
     let params_len = params.len();
     let mut problem = tiny_solver::Problem::new();
@@ -306,10 +303,11 @@ pub fn calib_camera(
         .map(|&i| {
             let rvec_name = format!("rvec{}", i);
             let tvec_name = format!("tvec{}", i);
-            (
-                result.remove(&rvec_name).unwrap(),
-                result.remove(&tvec_name).unwrap(),
-            )
+
+            RvecTvec {
+                rvec: result.remove(&rvec_name).unwrap(),
+                tvec: result.remove(&tvec_name).unwrap(),
+            }
         })
         .collect();
     (calibrated_camera, rtvec_vec)

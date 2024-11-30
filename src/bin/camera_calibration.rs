@@ -4,6 +4,7 @@ use camera_intrinsic::board::create_default_6x6_board;
 use camera_intrinsic::camera_model::model_to_json;
 use camera_intrinsic::data_loader::load_euroc;
 use camera_intrinsic::optimization::*;
+use camera_intrinsic::types::RvecTvec;
 use camera_intrinsic::util::*;
 use camera_intrinsic::visualization::*;
 use clap::Parser;
@@ -89,9 +90,8 @@ fn main() {
     let frame_feature1 = &detected_feature_frames[frame1];
     let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
     let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
-
-    println!("rvec {:?}", rvec0);
-    println!("tvec {:?}", tvec0);
+    let rtvec0 = RvecTvec::new(rvec0, tvec0);
+    let rtvec1 = RvecTvec::new(rvec1, tvec1);
 
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
@@ -102,10 +102,8 @@ fn main() {
     let initial_camera = init_ucm(
         frame_feature0,
         frame_feature1,
-        &rvec0,
-        &tvec0,
-        &rvec1,
-        &tvec1,
+        &rtvec0,
+        &rtvec1,
         init_f,
         init_alpha,
     );
@@ -118,7 +116,7 @@ fn main() {
     convert_model(&initial_camera, &mut final_model);
     println!("{:?}", final_model);
 
-    let (final_result, rtvec_list) = calib_camera(&detected_feature_frames, &final_model);
+    let (final_result, _rtvec_list) = calib_camera(&detected_feature_frames, &final_model);
     println!("{:?}", final_result);
     model_to_json(&cli.output_json, &final_result);
 }

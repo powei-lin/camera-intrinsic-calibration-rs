@@ -27,3 +27,4 @@ Cargo.lock
 *.rrd
 remaped.png
 .DS_Store
+output.json
