@@ -7,8 +7,7 @@ use crate::detected_points::FrameFeature;
 
 fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na::Matrix3<f32>)> {
     let mut m1: faer::Mat<f32> = faer::Mat::zeros(6, 8);
-    for r in 0..6 {
-        let (pt0, pt1) = six_pt_pairs[r];
+    for (r, (pt0, pt1)) in six_pt_pairs.iter().enumerate() {
         let x = pt0.x;
         let y = pt0.y;
         let x_p = pt1.x;
@@ -54,11 +53,11 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         debug!("b*b - 4ac < 0.0");
         return None;
     }
-    let g_result = vec![
+    let g_result = [
         (b_minus - bb_4ac.sqrt()) / (2.0 * (n02 * n07 - n05 * n06)),
         (b_minus + bb_4ac.sqrt()) / (2.0 * (n02 * n07 - n05 * n06)),
     ];
-    let mut temp_h = vec![na::Matrix3::zeros(), na::Matrix3::zeros()];
+    let mut temp_h = [na::Matrix3::zeros(), na::Matrix3::zeros()];
     let mut l_l_p = na::Matrix2::zeros();
     for which_gamma in 0..2 {
         let gamma = g_result[which_gamma];
@@ -74,8 +73,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         let mut eq10a: faer::Mat<f32> = faer::Mat::zeros(6, 4);
         let mut eq10b: faer::Mat<f32> = faer::Mat::zeros(6, 1);
 
-        for row in 0..6 {
-            let (pt0, pt1) = six_pt_pairs[row];
+        for (row, (pt0, pt1)) in six_pt_pairs.iter().enumerate().take(6) {
             let x = pt0.x;
             let y = pt0.y;
             let x_p = pt1.x;
@@ -150,7 +148,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
     if avg_lambda > 0.0 {
         avg_lambda *= -1.0;
     }
-    return Some((avg_lambda, homography_mat));
+    Some((avg_lambda, homography_mat))
 }
 
 fn evaluate_homography_lambda(
@@ -173,7 +171,7 @@ fn evaluate_homography_lambda(
         let mut in_sqrt = -4.0 * lambda * r[0] * r[0] - 4.0 * lambda * r[1] * r[1] + r[2] * r[2];
         in_sqrt = in_sqrt.max(0.0);
 
-        let alpha = vec![
+        let alpha = [
             r[2] / 2.0 - in_sqrt.sqrt() / 2.0,
             r[2] / 2.0 + in_sqrt.sqrt() / 2.0,
         ];
@@ -188,7 +186,7 @@ fn evaluate_homography_lambda(
         avg_dist += d.sqrt();
     }
 
-    return avg_dist / normalized_p2d_pair.len() as f32;
+    avg_dist / normalized_p2d_pair.len() as f32
 }
 
 pub fn radial_distortion_homography(
@@ -203,14 +201,12 @@ pub fn radial_distortion_homography(
         .features
         .iter()
         .filter_map(|(i, p0)| {
-            if let Some(p1) = frame_feature1.features.get(i) {
-                Some((
+            frame_feature1.features.get(i).map(|p1| {
+                (
                     (p0.p2d - cxcy) / half_img_size,
                     (p1.p2d - cxcy) / half_img_size,
-                ))
-            } else {
-                None
-            }
+                )
+            })
         })
         .collect();
     let ransac_times = 1000;
@@ -223,10 +219,7 @@ pub fn radial_distortion_homography(
     for _ in 0..ransac_times {
         nums.shuffle(&mut rng);
         // println!("{:?}", &nums[0..6]);
-        let six_pt_pairs: Vec<_> = (0..6)
-            .into_iter()
-            .map(|i| normalized_p2d_pairs[nums[i]])
-            .collect();
+        let six_pt_pairs: Vec<_> = (0..6).map(|i| normalized_p2d_pairs[nums[i]]).collect();
         if let Some((lambda, h_mat)) = h6_l1l2_solver(&six_pt_pairs) {
             let avg_distance = evaluate_homography_lambda(&normalized_p2d_pairs, &h_mat, lambda);
             if avg_distance < best_distance {
@@ -286,13 +279,10 @@ pub fn homography_to_focal(h_mat: &na::Matrix3<f32>) -> Option<f32> {
     } else {
         None
     };
-    if f0.is_some() && f1.is_some() {
-        Some((f0.unwrap() * f1.unwrap()).sqrt())
-    } else if f0.is_some() {
-        f0
-    } else if f1.is_some() {
-        f1
-    } else {
-        None
+    match (f0, f1) {
+        (Some(f0), Some(f1)) => Some((f0 * f1).sqrt()),
+        (Some(f0), None) => Some(f0),
+        (None, Some(f1)) => Some(f1),
+        _ => None,
     }
 }

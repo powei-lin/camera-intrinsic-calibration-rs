@@ -1,11 +1,7 @@
-use camera_intrinsic::camera_model::{
-    model_from_json, model_to_json, remap, GenericModel, KannalaBrandt4, OpenCVModel5, EUCM, UCM,
-};
+use camera_intrinsic::camera_model::{model_from_json, model_to_json, remap, GenericModel, UCM};
 use camera_intrinsic::util::convert_model;
-use faer;
 use image::ImageReader;
 use nalgebra as na;
-use rand;
 
 fn main() {
     env_logger::init();

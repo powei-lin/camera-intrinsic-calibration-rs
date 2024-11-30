@@ -1,4 +1,4 @@
-use std::{collections::HashMap, f64::consts::PI};
+use std::collections::HashMap;
 
 use aprilgrid::detector::TagDetector;
 use camera_intrinsic::{
@@ -55,11 +55,8 @@ fn main() {
         .iter()
         .zip(p3ds)
         .filter_map(|(p2, p3)| {
-            if let Some(p2) = p2 {
-                Some((p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
-            } else {
-                None
-            }
+            p2.as_ref()
+                .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
         })
         .unzip();
     let (r, t) = sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap();
@@ -76,7 +73,7 @@ fn main() {
         println!("{}", p33);
         println!("{}", p2);
         println!("{}", p33 / p33.z);
-        println!("");
+        println!();
     });
     let new_w_h = 1024;
     let p = model.estimate_new_camera_matrix_for_undistort(1.0, Some((new_w_h, new_w_h)));

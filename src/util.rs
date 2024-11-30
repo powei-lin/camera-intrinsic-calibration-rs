@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
@@ -63,12 +64,19 @@ pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize,
     let mut max_detection = 0;
     let mut max_detection_idxs = Vec::new();
     for (i, f) in detected_feature_frames.iter().enumerate() {
-        if f.features.len() > max_detection {
-            max_detection = f.features.len();
-            max_detection_idxs = vec![i];
-        } else if f.features.len() == max_detection {
-            max_detection_idxs.push(i);
+        match f.features.len().cmp(&max_detection) {
+            Ordering::Greater => {
+                max_detection = f.features.len();
+                max_detection_idxs = vec![i];
+            }
+            Ordering::Less => {}
+            Ordering::Equal => {
+                max_detection_idxs.push(i);
+            }
         }
+        // if f.features.len() > max_detection {
+        // } else if f.features.len() == max_detection {
+        // }
     }
     let mut v0: Vec<_> = max_detection_idxs
         .iter()
@@ -120,7 +128,7 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     // distortion parameter bound
-    set_problem_parameter_bound(&mut problem, &target_model);
+    set_problem_parameter_bound(&mut problem, target_model);
 
     // optimize
     let result = optimizer.optimize(&problem, &initial_values, None);
@@ -152,7 +160,7 @@ pub fn init_ucm(
     let mut init_focal_alpha_problem = tiny_solver::Problem::new();
     let init_f_alpha = na::dvector![init_f, init_alpha];
 
-    for (_, fp) in &frame_feature0.features {
+    for fp in frame_feature0.features.values() {
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
@@ -166,7 +174,7 @@ pub fn init_ucm(
         );
     }
 
-    for (_, fp) in &frame_feature1.features {
+    for fp in frame_feature1.features.values() {
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
@@ -229,10 +237,12 @@ pub fn init_ucm(
     .0
 }
 
+pub type RTvecList = Vec<(na::DVector<f64>, na::DVector<f64>)>;
+
 pub fn calib_camera(
     frame_feature_list: &[FrameFeature],
     generic_camera: &GenericModel<f64>,
-) -> (GenericModel<f64>, Vec<(na::DVector<f64>, na::DVector<f64>)>) {
+) -> (GenericModel<f64>, RTvecList) {
     let params = generic_camera.params();
     let params_len = params.len();
     let mut problem = tiny_solver::Problem::new();
@@ -245,8 +255,8 @@ pub fn calib_camera(
         let mut p2ds = Vec::new();
         let rvec_name = format!("rvec{}", i);
         let tvec_name = format!("tvec{}", i);
-        for (_, fp) in &frame_feature.features {
-            let cost = ReprojectionFactor::new(&generic_camera, &fp.p3d, &fp.p2d);
+        for fp in frame_feature.features.values() {
+            let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d);
             problem.add_residual_block(
                 2,
                 vec![
@@ -265,11 +275,8 @@ pub fn calib_camera(
             .iter()
             .zip(p3ds)
             .filter_map(|(p2, p3)| {
-                if let Some(p2) = p2 {
-                    Some((p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
-                } else {
-                    None
-                }
+                p2.as_ref()
+                    .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
             })
             .unzip();
         // if p3ds.len() < 6 {
@@ -280,24 +287,20 @@ pub fn calib_camera(
         let (rvec, tvec) =
             rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
 
-        if !initial_values.contains_key(&rvec_name) {
-            initial_values.insert(rvec_name, rvec);
-        }
-        if !initial_values.contains_key(&tvec_name) {
-            initial_values.insert(tvec_name, tvec);
-        }
+        initial_values.entry(rvec_name).or_insert(rvec);
+        initial_values.entry(tvec_name).or_insert(tvec);
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
     let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
-    set_problem_parameter_bound(&mut problem, &generic_camera);
+    set_problem_parameter_bound(&mut problem, generic_camera);
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
     let new_params = result.get("params").unwrap();
     println!("params {}", new_params);
-    let mut calibrated_camera = generic_camera.clone();
-    calibrated_camera.set_params(&new_params);
+    let mut calibrated_camera = *generic_camera;
+    calibrated_camera.set_params(new_params);
     let rtvec_vec: Vec<_> = valid_indexes
         .iter()
         .map(|&i| {

@@ -1,6 +1,4 @@
-use camera_intrinsic::camera_model::generic::{
-    estimate_new_camera_matrix_for_undistort, remap, GenericModel,
-};
+use camera_intrinsic::camera_model::generic::{remap, GenericModel};
 use camera_intrinsic::camera_model::model_to_json;
 use camera_intrinsic::camera_model::{eucm, model_from_json};
 use image::ImageReader;
