@@ -180,4 +180,13 @@ impl<T: na::RealField + Clone> CameraModel<T> for KannalaBrandt4<T> {
         self.width = w;
         self.height = h;
     }
+    fn distortion_params_bound(&self) -> Vec<(usize, (f64, f64))> {
+        // k [-1, 1]
+        vec![
+            (4, (-1.0, 1.0)),
+            (5, (-1.0, 1.0)),
+            (6, (-1.0, 1.0)),
+            (7, (-1.0, 1.0)),
+        ]
+    }
 }

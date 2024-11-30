@@ -203,4 +203,15 @@ impl<T: na::RealField + Clone> CameraModel<T> for OpenCVModel5<T> {
         self.width = w;
         self.height = h;
     }
+    fn distortion_params_bound(&self) -> Vec<(usize, (f64, f64))> {
+        // k1, k2, k3 [-1, 1]
+        // p1, p2, k3 [-0.001, 0.001]
+        vec![
+            (4, (-1.0, 1.0)),
+            (5, (-1.0, 1.0)),
+            (6, (-0.001, 0.001)),
+            (7, (-0.001, 0.001)),
+            (8, (-1.0, 1.0)),
+        ]
+    }
 }

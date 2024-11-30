@@ -5,6 +5,7 @@ use crate::detected_points::FrameFeature;
 
 use super::camera_model::generic::GenericModel;
 use super::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
+use log::debug;
 use nalgebra::{self as na, Const, Dyn};
 use num_dual::DualDVec64;
 use tiny_solver::factors::Factor;
@@ -304,13 +305,6 @@ pub fn init_ucm(
 ) -> GenericModel<f64> {
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
-    // let init_f = 471.0;
-    // let init_alpha = 0.67;
-    //     471.019
-    // 470.243
-    // 367.122
-    // 246.741
-    // 0.67485
     let init_params = na::dvector![init_f, init_f, half_w, half_h, init_alpha];
     let ucm_init_model = GenericModel::UCM(UCM::new(
         &init_params,
@@ -394,7 +388,6 @@ pub fn init_ucm(
     calib_camera(
         &[frame_feature0.clone(), frame_feature1.clone()],
         &ucm_camera,
-        Some(second_round_values),
     )
     .0
 }
@@ -402,21 +395,15 @@ pub fn init_ucm(
 pub fn calib_camera(
     frame_feature_list: &[FrameFeature],
     generic_camera: &GenericModel<f64>,
-    initial_values_option: Option<HashMap<String, na::DVector<f64>>>,
 ) -> (GenericModel<f64>, Vec<(na::DVector<f64>, na::DVector<f64>)>) {
     let params = generic_camera.params();
     let params_len = params.len();
     let mut problem = tiny_solver::Problem::new();
-    let mut initial_values = if let Some(mut init_values) = initial_values_option {
-        init_values.insert("params".to_string(), params);
-        init_values
-    } else {
-        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)])
-    };
-    println!("init {:?}", initial_values);
+    let mut initial_values =
+        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)]);
+    debug!("init {:?}", initial_values);
     let mut valid_indexes = Vec::new();
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
-        // println!("f{}", i);
         let mut p3ds = Vec::new();
         let mut p2ds = Vec::new();
         let rvec_name = format!("rvec{}", i);
@@ -455,17 +442,7 @@ pub fn calib_camera(
         valid_indexes.push(i);
         let (rvec, tvec) =
             rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
-        // let tt = na::Vector3::new(tvec[0], tvec[1], tvec[2]);
-        // let rr = na::Vector3::new(rvec[0], rvec[1], rvec[2]);
-        // let rt = na::Isometry3::new(tt, rr);
-        // if p3ds.iter().map(|p|{
-        //     let pp = na::Point3::new(p.x as f64, p.y as f64, p.z as f64);
-        //     let z = (rt * pp).z;
-        //     z
-        // }).any(|z| z < 0.0){
-        //     continue;
-        // }
-        // println!("rvec pnp {}", rvec);
+
         if !initial_values.contains_key(&rvec_name) {
             initial_values.insert(rvec_name, rvec);
         }
@@ -480,6 +457,9 @@ pub fn calib_camera(
     problem.set_variable_bounds("params", 1, 0.0, 10000.0);
     problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
     problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
+    for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
+        problem.set_variable_bounds("params", distortion_idx, lower, upper);
+    }
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
     let new_params = result.get("params").unwrap();

@@ -146,4 +146,9 @@ impl<T: na::RealField + Clone> CameraModel<T> for EUCM<T> {
         self.width = w;
         self.height = h;
     }
+
+    fn distortion_params_bound(&self) -> Vec<(usize, (f64, f64))> {
+        // alpha [0, 1], beta > 0
+        vec![(4, (0.0, 1.0)), (5, (0.0, f64::MAX))]
+    }
 }

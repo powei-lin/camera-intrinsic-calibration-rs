@@ -68,6 +68,7 @@ impl GenericModel<f64> {
     generic_impl_self!(set_w_h, w: u32, h: u32);
     generic_impl_self!(camera_params -> na::DVector<f64>);
     generic_impl_self!(distortion_params -> na::DVector<f64>);
+    generic_impl_self!(distortion_params_bound -> Vec<(usize, (f64, f64))>);
     generic_impl_self!(project_one, na::Vector2<f64>, pt: &na::Vector3<f64>);
     generic_impl_self!(unproject_one, na::Vector3<f64>, pt: &na::Vector2<f64>);
     generic_impl_self!(project, Vec<Option<na::Vector2<f64>>>, p3d: &[na::Vector3<f64>]);
@@ -190,6 +191,7 @@ where
     fn height(&self) -> T;
     fn set_w_h(&mut self, w: u32, h: u32);
     fn project_one(&self, pt: &na::Vector3<T>) -> na::Vector2<T>;
+    fn distortion_params_bound(&self) -> Vec<(usize, (f64, f64))>;
     fn project(&self, p3d: &[na::Vector3<T>]) -> Vec<Option<na::Vector2<T>>> {
         p3d.par_iter()
             .map(|pt| {
