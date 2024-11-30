@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::detected_points::FrameFeature;
+use crate::detected_points::{FeaturePoint, FrameFeature};
 
 use super::camera_model::generic::GenericModel;
 use super::camera_model::UCM;
@@ -30,6 +30,72 @@ fn set_problem_parameter_bound(
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
         problem.set_variable_bounds("params", distortion_idx, lower, upper);
     }
+}
+
+fn features_avg_center(features: &HashMap<u32, FeaturePoint>) -> glam::Vec2 {
+    features
+        .iter()
+        .map(|(_, p)| p.p2d)
+        .reduce(|acc, e| acc + e)
+        .unwrap()
+        / features.len() as f32
+}
+fn features_covered_area(features: &HashMap<u32, FeaturePoint>) -> f32 {
+    let (xmin, ymin, xmax, ymax) = features.iter().map(|(_, p)| p.p2d).fold(
+        (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+        |acc, e| {
+            let xmin = acc.0.min(e.x);
+            let ymin = acc.1.min(e.y);
+            let xmax = acc.0.max(e.x);
+            let ymax = acc.1.max(e.y);
+            (xmin, ymin, xmax, ymax)
+        },
+    );
+    (xmax - xmin) * (ymax - ymin)
+}
+
+fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
+    let v = v0 - v1;
+    v.x * v.x + v.y * v.y
+}
+
+pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usize) {
+    let mut max_detection = 0;
+    let mut max_detection_idxs = Vec::new();
+    for (i, f) in detected_feature_frames.iter().enumerate() {
+        if f.features.len() > max_detection {
+            max_detection = f.features.len();
+            max_detection_idxs = vec![i];
+        } else if f.features.len() == max_detection {
+            max_detection_idxs.push(i);
+        }
+    }
+    let mut v0: Vec<_> = max_detection_idxs
+        .iter()
+        .map(|i| {
+            let p_avg = features_avg_center(&detected_feature_frames[*i].features);
+            (i, p_avg)
+        })
+        .collect();
+
+    let avg_all = v0.iter().map(|(_, p)| *p).reduce(|acc, e| acc + e).unwrap() / v0.len() as f32;
+    // let avg_all = Vec2::ZERO;
+    v0.sort_by(|a, b| {
+        vec2_distance2(&a.1, &avg_all)
+            .partial_cmp(&vec2_distance2(&b.1, &avg_all))
+            .unwrap()
+    });
+    let mut v1: Vec<_> = max_detection_idxs
+        .iter()
+        .map(|&i| {
+            let area = features_covered_area(&detected_feature_frames[i].features);
+            (i, area)
+        })
+        .collect();
+    v1.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+    // (*v0[0].0, *v0.last().unwrap().0)
+    (v1.last().unwrap().0, *v0.last().unwrap().0)
 }
 
 pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut GenericModel<f64>) {
