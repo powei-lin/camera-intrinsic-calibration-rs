@@ -1,5 +1,5 @@
 use crate::camera_model::generic::GenericModel;
-use crate::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, UCM};
+use crate::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, EUCMT, UCM};
 use nalgebra as na;
 use num_dual::DualDVec64;
 use tiny_solver::factors::Factor;
@@ -58,6 +58,9 @@ impl Factor for ModelConvertFactor {
             }
             GenericModel::KannalaBrandt4(m) => {
                 GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
+            }
+            GenericModel::EUCMT(m) => {
+                GenericModel::EUCMT(EUCMT::new(&params[0], m.width, m.height))
             }
         };
         let p2ds0 = self.source.project(&self.p3ds);
@@ -119,6 +122,9 @@ impl Factor for UCMInitFocalAlphaFactor {
             GenericModel::KannalaBrandt4(m) => {
                 GenericModel::KannalaBrandt4(KannalaBrandt4::new(&cam_params, m.width, m.height))
             }
+            GenericModel::EUCMT(m) => {
+                GenericModel::EUCMT(EUCMT::new(&cam_params, m.width, m.height))
+            }
         };
         let rvec = na::Vector3::new(
             params[1][0].clone(),
@@ -174,6 +180,9 @@ impl Factor for ReprojectionFactor {
             }
             GenericModel::KannalaBrandt4(m) => {
                 GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
+            }
+            GenericModel::EUCMT(m) => {
+                GenericModel::EUCMT(EUCMT::new(&params[0], m.width, m.height))
             }
         };
         let rvec = na::Vector3::new(
