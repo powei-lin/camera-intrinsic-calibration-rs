@@ -21,8 +21,11 @@ tar xvzf dataset-calib-cam1_1024_16.tar
 # [Optional] export RUST_LOG=trace
 ccrs dataset-calib-cam1_1024_16 --model eucm
 ```
-
-## Library usage
+## Examples
+```sh
+# undistort and remap
+cargo run -r --example remap
+```
 
 ## Acknowledgements
 Links:
