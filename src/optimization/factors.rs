@@ -49,19 +49,7 @@ impl Factor for ModelConvertFactor {
         &self,
         params: &[nalgebra::DVector<num_dual::DualDVec64>],
     ) -> nalgebra::DVector<num_dual::DualDVec64> {
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&params[0], m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&params[0], m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&params[0], m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
-            }
-            GenericModel::EUCMT(m) => {
-                GenericModel::EUCMT(EUCMT::new(&params[0], m.width, m.height))
-            }
-        };
+        let model = self.target.new_from_params(&params[0]);
         let p2ds0 = self.source.project(&self.p3ds);
         let p2ds1 = model.project(&self.p3ds);
         let diff: Vec<_> = p2ds0
@@ -112,19 +100,7 @@ impl Factor for UCMInitFocalAlphaFactor {
         cam_params[0] = params[0][0].clone();
         cam_params[1] = params[0][0].clone();
         cam_params[4] = params[0][1].clone();
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&cam_params, m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&cam_params, m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&cam_params, m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&cam_params, m.width, m.height))
-            }
-            GenericModel::EUCMT(m) => {
-                GenericModel::EUCMT(EUCMT::new(&cam_params, m.width, m.height))
-            }
-        };
+        let model = self.target.new_from_params(&cam_params);
         let rvec = na::Vector3::new(
             params[1][0].clone(),
             params[1][1].clone(),
@@ -171,19 +147,7 @@ impl Factor for ReprojectionFactor {
         params: &[nalgebra::DVector<num_dual::DualDVec64>],
     ) -> nalgebra::DVector<num_dual::DualDVec64> {
         // params[params, rvec, tvec]
-        let model: GenericModel<num_dual::DualDVec64> = match &self.target {
-            GenericModel::EUCM(m) => GenericModel::EUCM(EUCM::new(&params[0], m.width, m.height)),
-            GenericModel::UCM(m) => GenericModel::UCM(UCM::new(&params[0], m.width, m.height)),
-            GenericModel::OpenCVModel5(m) => {
-                GenericModel::OpenCVModel5(OpenCVModel5::new(&params[0], m.width, m.height))
-            }
-            GenericModel::KannalaBrandt4(m) => {
-                GenericModel::KannalaBrandt4(KannalaBrandt4::new(&params[0], m.width, m.height))
-            }
-            GenericModel::EUCMT(m) => {
-                GenericModel::EUCMT(EUCMT::new(&params[0], m.width, m.height))
-            }
-        };
+        let model = self.target.new_from_params(&params[0]);
         let rvec = na::Vector3::new(
             params[1][0].clone(),
             params[1][1].clone(),
