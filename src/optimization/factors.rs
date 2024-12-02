@@ -1,5 +1,4 @@
-use crate::camera_model::generic::GenericModel;
-use crate::camera_model::{KannalaBrandt4, OpenCVModel5, EUCM, EUCMT, UCM};
+use camera_intrinsic_model::*;
 use nalgebra as na;
 use num_dual::DualDVec64;
 use tiny_solver::factors::Factor;

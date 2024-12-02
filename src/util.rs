@@ -4,9 +4,8 @@ use std::collections::HashMap;
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::types::RvecTvec;
 
-use super::camera_model::generic::GenericModel;
-use super::camera_model::UCM;
 use super::optimization::factors::*;
+use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
 use tiny_solver::loss_functions::HuberLoss;

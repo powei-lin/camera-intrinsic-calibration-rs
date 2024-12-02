@@ -1,12 +1,12 @@
 use aprilgrid::detector::TagDetector;
 use aprilgrid::TagFamily;
-use camera_intrinsic::board::create_default_6x6_board;
-use camera_intrinsic::camera_model::model_to_json;
-use camera_intrinsic::data_loader::load_euroc;
-use camera_intrinsic::optimization::*;
-use camera_intrinsic::types::RvecTvec;
-use camera_intrinsic::util::*;
-use camera_intrinsic::visualization::*;
+use camera_intrinsic_calibration::board::create_default_6x6_board;
+use camera_intrinsic_calibration::data_loader::load_euroc;
+use camera_intrinsic_calibration::optimization::*;
+use camera_intrinsic_calibration::types::RvecTvec;
+use camera_intrinsic_calibration::util::*;
+use camera_intrinsic_calibration::visualization::*;
+use camera_intrinsic_model::*;
 use clap::Parser;
 use log::trace;
 use std::time::Instant;
@@ -23,7 +23,7 @@ struct CCRSCli {
 
     /// model: ["ucm", "eucm", "kb4", "opencv5"]
     #[arg(short, long, value_enum, default_value = "eucm")]
-    model: camera_intrinsic::camera_model::GenericModel<f64>,
+    model: GenericModel<f64>,
 
     #[arg(long, default_value_t = 0)]
     start_idx: usize,

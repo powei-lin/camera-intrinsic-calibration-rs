@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
 use aprilgrid::detector::TagDetector;
-use camera_intrinsic::{
-    board::create_default_6x6_board,
-    camera_model::{remap, GenericModel, UCM},
-    detected_points::FeaturePoint,
+use camera_intrinsic_calibration::{
+    board::create_default_6x6_board, detected_points::FeaturePoint,
 };
+use camera_intrinsic_model::*;
 use glam::Vec2;
 use image::ImageReader;
 use nalgebra as na;
