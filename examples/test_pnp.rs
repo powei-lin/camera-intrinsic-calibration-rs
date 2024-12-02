@@ -76,7 +76,7 @@ fn main() {
     });
     let new_w_h = 1024;
     let p = model.estimate_new_camera_matrix_for_undistort(1.0, Some((new_w_h, new_w_h)));
-    let (xmap, ymap) = model.init_undistort_map(&p, (new_w_h, new_w_h));
+    let (xmap, ymap) = model.init_undistort_map(&p, (new_w_h, new_w_h), None);
     let remaped = remap(&img, &xmap, &ymap);
     remaped.save("remaped_euroc.png").unwrap()
 }
