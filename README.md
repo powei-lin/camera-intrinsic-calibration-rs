@@ -1,7 +1,7 @@
 # camera-intrinsic-calibration
 [![crate](https://img.shields.io/crates/v/camera-intrinsic-calibration.svg)](https://crates.io/crates/camera-intrinsic-calibration)
 
-A pure rust camera intrinsic library.
+A pure rust camera intrinsic calibration library.
 
 ## CLI Usage
 ```sh
