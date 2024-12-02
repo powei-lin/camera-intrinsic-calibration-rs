@@ -6,7 +6,7 @@ A pure rust camera intrinsic library.
 ## CLI Usage
 ```sh
 # install cli
-cargo install camera-intrinsic
+cargo install camera-intrinsic-calibration
 
 ccrs -h
 
