@@ -27,48 +27,58 @@ pub fn load_euroc(
     board: &board::Board,
     start_idx: usize,
     step: usize,
+    cam_num: usize,
     recording_option: Option<&rerun::RecordingStream>,
-) -> Vec<FrameFeature> {
-    let img_paths = glob(format!("{}/mav0/cam0/data/*.png", root_folder).as_str()).expect("failed");
-    img_paths
-        .skip(start_idx)
-        .step_by(step)
-        .par_bridge()
-        .filter_map(|path| {
-            let path = path.unwrap();
-            let time_ns = path_to_timestamp(&path);
-            let img = ImageReader::open(&path).unwrap().decode().unwrap();
-            if let Some(recording) = recording_option {
-                recording.set_time_nanos("stable", time_ns);
-                log_image_as_compressed(recording, "/cam0", &img, image::ImageFormat::Jpeg);
-            };
-            let detected_tag = tag_detector.detect(&img);
-            let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
-                .iter()
-                .flat_map(|(k, v)| {
-                    v.iter()
-                        .enumerate()
-                        .filter_map(|(i, p)| {
-                            let id = k * 4 + i as u32;
-                            if let Some(p3d) = board.id_to_3d.get(&id) {
-                                let p2d = Vec2::new(p.0, p.1);
-                                Some((id, FeaturePoint { p2d, p3d: *p3d }))
-                            } else {
-                                None
-                            }
+) -> Vec<Vec<Option<FrameFeature>>> {
+    const MIN_CORNERS: usize = 24;
+    (0..cam_num)
+        .into_iter()
+        .map(|cam_idx| {
+            let img_paths =
+                glob(format!("{}/mav0/cam{}/data/*.png", root_folder, cam_idx).as_str())
+                    .expect("failed");
+            img_paths
+                .skip(start_idx)
+                .step_by(step)
+                .par_bridge()
+                .map(|path| {
+                    let path = path.unwrap();
+                    let time_ns = path_to_timestamp(&path);
+                    let img = ImageReader::open(&path).unwrap().decode().unwrap();
+                    if let Some(recording) = recording_option {
+                        recording.set_time_nanos("stable", time_ns);
+                        let topic = format!("/cam{}", cam_idx);
+                        log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
+                    };
+                    let detected_tag = tag_detector.detect(&img);
+                    let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
+                        .iter()
+                        .flat_map(|(k, v)| {
+                            v.iter()
+                                .enumerate()
+                                .filter_map(|(i, p)| {
+                                    let id = k * 4 + i as u32;
+                                    if let Some(p3d) = board.id_to_3d.get(&id) {
+                                        let p2d = Vec2::new(p.0, p.1);
+                                        Some((id, FeaturePoint { p2d, p3d: *p3d }))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>()
                         })
-                        .collect::<Vec<_>>()
+                        .collect();
+                    if tags_expand_ids.len() < MIN_CORNERS {
+                        None
+                    } else {
+                        Some(FrameFeature {
+                            time_ns,
+                            img_w_h: (img.width(), img.height()),
+                            features: tags_expand_ids,
+                        })
+                    }
                 })
-                .collect();
-            if tags_expand_ids.len() < 24 {
-                None
-            } else {
-                Some(FrameFeature {
-                    time_ns,
-                    img_w_h: (img.width(), img.height()),
-                    features: tags_expand_ids,
-                })
-            }
+                .collect()
         })
         .collect()
 }

@@ -60,28 +60,27 @@ fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
     v.x * v.x + v.y * v.y
 }
 
-pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usize) {
+pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) -> (usize, usize) {
     let mut max_detection = 0;
     let mut max_detection_idxs = Vec::new();
     for (i, f) in detected_feature_frames.iter().enumerate() {
-        match f.features.len().cmp(&max_detection) {
-            Ordering::Greater => {
-                max_detection = f.features.len();
-                max_detection_idxs = vec![i];
-            }
-            Ordering::Less => {}
-            Ordering::Equal => {
-                max_detection_idxs.push(i);
+        if let Some(f) = f {
+            match f.features.len().cmp(&max_detection) {
+                Ordering::Greater => {
+                    max_detection = f.features.len();
+                    max_detection_idxs = vec![i];
+                }
+                Ordering::Less => {}
+                Ordering::Equal => {
+                    max_detection_idxs.push(i);
+                }
             }
         }
-        // if f.features.len() > max_detection {
-        // } else if f.features.len() == max_detection {
-        // }
     }
     let mut v0: Vec<_> = max_detection_idxs
         .iter()
-        .map(|i| {
-            let p_avg = features_avg_center(&detected_feature_frames[*i].features);
+        .map(|&i| {
+            let p_avg = features_avg_center(&detected_feature_frames[i].clone().unwrap().features);
             (i, p_avg)
         })
         .collect();
@@ -96,14 +95,14 @@ pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize,
     let mut v1: Vec<_> = max_detection_idxs
         .iter()
         .map(|&i| {
-            let area = features_covered_area(&detected_feature_frames[i].features);
+            let area = features_covered_area(&detected_feature_frames[i].clone().unwrap().features);
             (i, area)
         })
         .collect();
     v1.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
     // (*v0[0].0, *v0.last().unwrap().0)
-    (v1.last().unwrap().0, *v0.last().unwrap().0)
+    (v1.last().unwrap().0, v0.last().unwrap().0)
 }
 
 pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut GenericModel<f64>) {
@@ -229,14 +228,14 @@ pub fn init_ucm(
     ));
     second_round_values.remove("params");
     calib_camera(
-        &[frame_feature0.clone(), frame_feature1.clone()],
+        &[Some(frame_feature0.clone()), Some(frame_feature1.clone())],
         &ucm_camera,
     )
     .0
 }
 
 pub fn calib_camera(
-    frame_feature_list: &[FrameFeature],
+    frame_feature_list: &[Option<FrameFeature>],
     generic_camera: &GenericModel<f64>,
 ) -> (GenericModel<f64>, Vec<RvecTvec>) {
     let params = generic_camera.params();
@@ -247,44 +246,46 @@ pub fn calib_camera(
     debug!("init {:?}", initial_values);
     let mut valid_indexes = Vec::new();
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
-        let mut p3ds = Vec::new();
-        let mut p2ds = Vec::new();
-        let rvec_name = format!("rvec{}", i);
-        let tvec_name = format!("tvec{}", i);
-        for fp in frame_feature.features.values() {
-            let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d);
-            problem.add_residual_block(
-                2,
-                vec![
-                    ("params".to_string(), params_len),
-                    (rvec_name.clone(), 3),
-                    (tvec_name.clone(), 3),
-                ],
-                Box::new(cost),
-                Some(Box::new(HuberLoss::new(1.0))),
-            );
-            p3ds.push(fp.p3d);
-            p2ds.push(na::Vector2::new(fp.p2d.x as f64, fp.p2d.y as f64));
-        }
-        let undistorted = generic_camera.unproject(&p2ds);
-        let (p3ds, p2ds_z): (Vec<_>, Vec<_>) = undistorted
-            .iter()
-            .zip(p3ds)
-            .filter_map(|(p2, p3)| {
-                p2.as_ref()
-                    .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
-            })
-            .unzip();
-        // if p3ds.len() < 6 {
-        //     println!("skip frame {}", i);
-        //     continue;
-        // }
-        valid_indexes.push(i);
-        let (rvec, tvec) =
-            rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
+        if let Some(frame_feature) = frame_feature {
+            let mut p3ds = Vec::new();
+            let mut p2ds = Vec::new();
+            let rvec_name = format!("rvec{}", i);
+            let tvec_name = format!("tvec{}", i);
+            for fp in frame_feature.features.values() {
+                let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d);
+                problem.add_residual_block(
+                    2,
+                    vec![
+                        ("params".to_string(), params_len),
+                        (rvec_name.clone(), 3),
+                        (tvec_name.clone(), 3),
+                    ],
+                    Box::new(cost),
+                    Some(Box::new(HuberLoss::new(1.0))),
+                );
+                p3ds.push(fp.p3d);
+                p2ds.push(na::Vector2::new(fp.p2d.x as f64, fp.p2d.y as f64));
+            }
+            let undistorted = generic_camera.unproject(&p2ds);
+            let (p3ds, p2ds_z): (Vec<_>, Vec<_>) = undistorted
+                .iter()
+                .zip(p3ds)
+                .filter_map(|(p2, p3)| {
+                    p2.as_ref()
+                        .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
+                })
+                .unzip();
+            // if p3ds.len() < 6 {
+            //     println!("skip frame {}", i);
+            //     continue;
+            // }
+            valid_indexes.push(i);
+            let (rvec, tvec) =
+                rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
 
-        initial_values.entry(rvec_name).or_insert(rvec);
-        initial_values.entry(tvec_name).or_insert(tvec);
+            initial_values.entry(rvec_name).or_insert(rvec);
+            initial_values.entry(tvec_name).or_insert(tvec);
+        }
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
