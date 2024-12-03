@@ -21,7 +21,7 @@ struct CCRSCli {
     #[arg(long, value_enum, default_value = "t36h11")]
     tag_family: TagFamily,
 
-    /// model: ["ucm", "eucm", "kb4", "opencv5"]
+    /// model: ["ucm", "eucm", "kb4", "opencv5", "eucmt", "ftheta"]
     #[arg(short, long, value_enum, default_value = "eucm")]
     model: GenericModel<f64>,
 

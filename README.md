@@ -18,6 +18,28 @@ tar xvzf dataset-calib-cam1_1024_16.tar
 # [Optional] export RUST_LOG=trace
 ccrs dataset-calib-cam1_1024_16 --model eucm
 ```
+
+## Supported formats
+### Dataset format
+* Euroc (default)
+    ```
+    dataset_root
+    └── mav0
+        └── cam0
+            ├── data
+            │   ├── {time_stamp}.png
+            │   ├── {time_stamp}.png
+            │   └── {time_stamp}.png
+            └── data.csv
+    ```
+### Camera models
+* Extended Unified (EUCM)
+* Extended Unified with Tangential (EUCMT)
+* Unified Camera Model (UCM)
+* Kannala Brandt (KB4) aka OpenCV Fisheye
+* OpenCV (OPENCV5) aka `plumb_bob` in ROS
+* F-theta (FTHETA) by NVidia
+
 ## Examples
 ```sh
 cargo run -r --example convert_model
