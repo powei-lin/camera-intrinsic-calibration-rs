@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::board;
+use crate::board::{self, Board};
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::visualization::log_image_as_compressed;
 use aprilgrid::detector::TagDetector;
 use glam::Vec2;
 use glob::glob;
-use image::ImageReader;
+use image::{DynamicImage, ImageReader};
 use rayon::prelude::*;
 
 fn path_to_timestamp(path: &Path) -> i64 {
@@ -21,6 +21,42 @@ fn path_to_timestamp(path: &Path) -> i64 {
     time_ns
 }
 
+fn image_to_option_feature_frame(
+    tag_detector: &TagDetector,
+    img: &DynamicImage,
+    board: &Board,
+    min_corners: usize,
+    time_ns: i64,
+) -> Option<FrameFeature> {
+    let detected_tag = tag_detector.detect(img);
+    let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
+        .iter()
+        .flat_map(|(k, v)| {
+            v.iter()
+                .enumerate()
+                .filter_map(|(i, p)| {
+                    let id = k * 4 + i as u32;
+                    if let Some(p3d) = board.id_to_3d.get(&id) {
+                        let p2d = Vec2::new(p.0, p.1);
+                        Some((id, FeaturePoint { p2d, p3d: *p3d }))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    if tags_expand_ids.len() < min_corners {
+        None
+    } else {
+        Some(FrameFeature {
+            time_ns,
+            img_w_h: (img.width(), img.height()),
+            features: tags_expand_ids,
+        })
+    }
+}
+
 pub fn load_euroc(
     root_folder: &str,
     tag_detector: &TagDetector,
@@ -32,7 +68,6 @@ pub fn load_euroc(
 ) -> Vec<Vec<Option<FrameFeature>>> {
     const MIN_CORNERS: usize = 24;
     (0..cam_num)
-        .into_iter()
         .map(|cam_idx| {
             let img_paths =
                 glob(format!("{}/mav0/cam{}/data/*.png", root_folder, cam_idx).as_str())
@@ -50,33 +85,42 @@ pub fn load_euroc(
                         let topic = format!("/cam{}", cam_idx);
                         log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
                     };
-                    let detected_tag = tag_detector.detect(&img);
-                    let tags_expand_ids: HashMap<u32, FeaturePoint> = detected_tag
-                        .iter()
-                        .flat_map(|(k, v)| {
-                            v.iter()
-                                .enumerate()
-                                .filter_map(|(i, p)| {
-                                    let id = k * 4 + i as u32;
-                                    if let Some(p3d) = board.id_to_3d.get(&id) {
-                                        let p2d = Vec2::new(p.0, p.1);
-                                        Some((id, FeaturePoint { p2d, p3d: *p3d }))
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .collect();
-                    if tags_expand_ids.len() < MIN_CORNERS {
-                        None
-                    } else {
-                        Some(FrameFeature {
-                            time_ns,
-                            img_w_h: (img.width(), img.height()),
-                            features: tags_expand_ids,
-                        })
-                    }
+                    image_to_option_feature_frame(tag_detector, &img, board, MIN_CORNERS, time_ns)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+pub fn load_general(
+    root_folder: &str,
+    tag_detector: &TagDetector,
+    board: &board::Board,
+    start_idx: usize,
+    step: usize,
+    cam_num: usize,
+    recording_option: Option<&rerun::RecordingStream>,
+) -> Vec<Vec<Option<FrameFeature>>> {
+    const MIN_CORNERS: usize = 24;
+    (0..cam_num)
+        .map(|cam_idx| {
+            let img_paths =
+                glob(format!("{}/cam{}/**/*.png", root_folder, cam_idx).as_str()).expect("failed");
+            img_paths
+                .skip(start_idx)
+                .step_by(step)
+                .enumerate()
+                .par_bridge()
+                .map(|(idx, path)| {
+                    let path = path.unwrap();
+                    let time_ns = idx as i64 * 100000000;
+                    let img = ImageReader::open(&path).unwrap().decode().unwrap();
+                    if let Some(recording) = recording_option {
+                        recording.set_time_nanos("stable", time_ns);
+                        let topic = format!("/cam{}", cam_idx);
+                        log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
+                    };
+                    image_to_option_feature_frame(tag_detector, &img, board, MIN_CORNERS, time_ns)
                 })
                 .collect()
         })

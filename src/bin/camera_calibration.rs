@@ -1,15 +1,24 @@
 use aprilgrid::detector::TagDetector;
 use aprilgrid::TagFamily;
-use camera_intrinsic_calibration::board::create_default_6x6_board;
-use camera_intrinsic_calibration::data_loader::load_euroc;
+use camera_intrinsic_calibration::board::Board;
+use camera_intrinsic_calibration::board::{
+    board_config_from_json, board_config_to_json, BoardConfig,
+};
+use camera_intrinsic_calibration::data_loader::{load_euroc, load_general};
 use camera_intrinsic_calibration::optimization::*;
 use camera_intrinsic_calibration::types::RvecTvec;
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use log::trace;
 use std::time::Instant;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum DatasetFormat {
+    Euroc,
+    General,
+}
 
 #[derive(Parser)]
 #[command(version, about, author)]
@@ -37,36 +46,63 @@ struct CCRSCli {
     #[arg(long, default_value_t = 1)]
     cam_num: usize,
 
+    #[arg(long)]
+    board_config: Option<String>,
+
     #[arg(short, long, default_value = "output.json")]
     output_json: String,
+
+    #[arg(long, value_enum, default_value = "euroc")]
+    dataset_format: DatasetFormat,
+
+    #[arg(long, action)]
+    one_focal: bool,
 }
 
 fn main() {
     env_logger::init();
     let cli = CCRSCli::parse();
     let detector = TagDetector::new(&cli.tag_family, None);
-    let board = create_default_6x6_board();
+    let board = if let Some(board_config_path) = cli.board_config {
+        Board::from_config(&board_config_from_json(&board_config_path))
+    } else {
+        let config = BoardConfig::default();
+        board_config_to_json("default_board_config.json", &config);
+        Board::from_config(&config)
+    };
     let dataset_root = &cli.path;
     let now = Instant::now();
     let recording = rerun::RecordingStreamBuilder::new("calibration")
         .save("output.rrd")
         .unwrap();
     trace!("Start loading data");
-    let mut cams_detected_feature_frames = load_euroc(
-        dataset_root,
-        &detector,
-        &board,
-        cli.start_idx,
-        cli.step,
-        cli.cam_num,
-        Some(&recording),
-    );
-    cams_detected_feature_frames.truncate(cli.max_images);
+    let mut cams_detected_feature_frames = match cli.dataset_format {
+        DatasetFormat::Euroc => load_euroc(
+            dataset_root,
+            &detector,
+            &board,
+            cli.start_idx,
+            cli.step,
+            cli.cam_num,
+            Some(&recording),
+        ),
+        DatasetFormat::General => load_general(
+            dataset_root,
+            &detector,
+            &board,
+            cli.start_idx,
+            cli.step,
+            cli.cam_num,
+            Some(&recording),
+        ),
+    };
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
+    println!("total: {} images", cams_detected_feature_frames[0].len());
+    cams_detected_feature_frames[0].truncate(cli.max_images);
     println!(
         "avg: {} sec",
-        duration_sec / cams_detected_feature_frames.len() as f64
+        duration_sec / cams_detected_feature_frames[0].len() as f64
     );
     for (cam_idx, feature_frames) in cams_detected_feature_frames.iter().enumerate() {
         let topic = format!("/cam{}", cam_idx);
@@ -81,7 +117,7 @@ fn main() {
     log_feature_frames(&recording, "/cam0/key", &key_frames);
 
     // initialize focal length and undistorted p2d for init poses
-    let (lambda, h_mat) = radial_distortion_homography(&frame_feature0, &frame_feature1);
+    let (lambda, h_mat) = radial_distortion_homography(frame_feature0, frame_feature1);
     // focal
     let f_option = homography_to_focal(&h_mat);
     if f_option.is_none() {
@@ -119,7 +155,11 @@ fn main() {
     convert_model(&initial_camera, &mut final_model);
     println!("Converted {:?}", final_model);
 
-    let (final_result, _rtvec_list) = calib_camera(&cams_detected_feature_frames[0], &final_model);
+    let (final_result, _rtvec_list) = calib_camera(
+        &cams_detected_feature_frames[0],
+        &final_model,
+        cli.one_focal,
+    );
     println!("Final {:?}", final_result);
     model_to_json(&cli.output_json, &final_result);
 }
