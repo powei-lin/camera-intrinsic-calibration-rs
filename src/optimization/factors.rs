@@ -127,6 +127,7 @@ pub struct ReprojectionFactor {
     pub target: GenericModel<DualDVec64>,
     pub p3d: na::Point3<DualDVec64>,
     pub p2d: na::Vector2<DualDVec64>,
+    pub xy_same_focal: bool,
 }
 
 impl ReprojectionFactor {
@@ -134,11 +135,17 @@ impl ReprojectionFactor {
         target: &GenericModel<f64>,
         p3d: &glam::Vec3,
         p2d: &glam::Vec2,
+        xy_same_focal: bool,
     ) -> ReprojectionFactor {
         let target = target.cast();
         let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
         let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
-        ReprojectionFactor { target, p3d, p2d }
+        ReprojectionFactor {
+            target,
+            p3d,
+            p2d,
+            xy_same_focal,
+        }
     }
 }
 impl Factor for ReprojectionFactor {
@@ -147,7 +154,11 @@ impl Factor for ReprojectionFactor {
         params: &[nalgebra::DVector<num_dual::DualDVec64>],
     ) -> nalgebra::DVector<num_dual::DualDVec64> {
         // params[params, rvec, tvec]
-        let model = self.target.new_from_params(&params[0]);
+        let mut params0 = params[0].clone();
+        if self.xy_same_focal {
+            params0 = params0.clone().insert_row(1, params0[0].clone());
+        }
+        let model = self.target.new_from_params(&params0);
         let rvec = na::Vector3::new(
             params[1][0].clone(),
             params[1][1].clone(),

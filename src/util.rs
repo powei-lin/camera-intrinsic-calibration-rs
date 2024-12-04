@@ -23,13 +23,29 @@ pub fn rtvec_to_na_dvec(
 fn set_problem_parameter_bound(
     problem: &mut tiny_solver::Problem,
     generic_camera: &GenericModel<f64>,
+    xy_same_focal: bool,
 ) {
+    let shift = if xy_same_focal { 1 } else { 0 };
     problem.set_variable_bounds("params", 0, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 1, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 2, 0.0, generic_camera.width());
-    problem.set_variable_bounds("params", 3, 0.0, generic_camera.height());
+    problem.set_variable_bounds("params", 1 - shift, 0.0, 10000.0);
+    problem.set_variable_bounds("params", 2 - shift, 0.0, generic_camera.width());
+    problem.set_variable_bounds("params", 3 - shift, 0.0, generic_camera.height());
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
-        problem.set_variable_bounds("params", distortion_idx, lower, upper);
+        problem.set_variable_bounds("params", distortion_idx - shift, lower, upper);
+    }
+}
+fn set_problem_parameter_disabled(
+    problem: &mut tiny_solver::Problem,
+    init_values: &mut HashMap<String, na::DVector<f64>>,
+    generic_camera: &GenericModel<f64>,
+    xy_same_focal: bool,
+    disabled_distortions: usize,
+) {
+    let shift = if xy_same_focal { 1 } else { 0 };
+    for i in 0..disabled_distortions {
+        let distortion_idx = generic_camera.params().len() - 1 - shift - i;
+        problem.fix_variable("params", distortion_idx);
+        init_values.get_mut("params").unwrap()[distortion_idx] = 0.0;
     }
 }
 
@@ -60,28 +76,27 @@ fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
     v.x * v.x + v.y * v.y
 }
 
-pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize, usize) {
+pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) -> (usize, usize) {
     let mut max_detection = 0;
     let mut max_detection_idxs = Vec::new();
     for (i, f) in detected_feature_frames.iter().enumerate() {
-        match f.features.len().cmp(&max_detection) {
-            Ordering::Greater => {
-                max_detection = f.features.len();
-                max_detection_idxs = vec![i];
-            }
-            Ordering::Less => {}
-            Ordering::Equal => {
-                max_detection_idxs.push(i);
+        if let Some(f) = f {
+            match f.features.len().cmp(&max_detection) {
+                Ordering::Greater => {
+                    max_detection = f.features.len();
+                    max_detection_idxs = vec![i];
+                }
+                Ordering::Less => {}
+                Ordering::Equal => {
+                    max_detection_idxs.push(i);
+                }
             }
         }
-        // if f.features.len() > max_detection {
-        // } else if f.features.len() == max_detection {
-        // }
     }
     let mut v0: Vec<_> = max_detection_idxs
         .iter()
-        .map(|i| {
-            let p_avg = features_avg_center(&detected_feature_frames[*i].features);
+        .map(|&i| {
+            let p_avg = features_avg_center(&detected_feature_frames[i].clone().unwrap().features);
             (i, p_avg)
         })
         .collect();
@@ -96,23 +111,27 @@ pub fn find_best_two_frames(detected_feature_frames: &[FrameFeature]) -> (usize,
     let mut v1: Vec<_> = max_detection_idxs
         .iter()
         .map(|&i| {
-            let area = features_covered_area(&detected_feature_frames[i].features);
+            let area = features_covered_area(&detected_feature_frames[i].clone().unwrap().features);
             (i, area)
         })
         .collect();
     v1.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
     // (*v0[0].0, *v0.last().unwrap().0)
-    (v1.last().unwrap().0, *v0.last().unwrap().0)
+    (v1.last().unwrap().0, v0.last().unwrap().0)
 }
 
-pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut GenericModel<f64>) {
+pub fn convert_model(
+    source_model: &GenericModel<f64>,
+    target_model: &mut GenericModel<f64>,
+    disabled_distortions: usize,
+) {
     let mut problem = tiny_solver::Problem::new();
     let edge_pixels = source_model.width().max(source_model.height()) as u32 / 100;
     let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, 3);
     problem.add_residual_block(
         cost.residaul_num(),
-        vec![("x".to_string(), target_model.params().len())],
+        vec![("params".to_string(), target_model.params().len())],
         Box::new(cost),
         Some(Box::new(HuberLoss::new(1.0))),
     );
@@ -121,20 +140,26 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
     let mut target_params_init = target_model.params();
     target_params_init.rows_mut(0, 4).copy_from(&camera_params);
 
-    let initial_values =
-        HashMap::<String, na::DVector<f64>>::from([("x".to_string(), target_params_init)]);
+    let mut initial_values =
+        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), target_params_init)]);
 
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     // distortion parameter bound
-    set_problem_parameter_bound(&mut problem, target_model);
-
+    set_problem_parameter_bound(&mut problem, target_model, false);
+    set_problem_parameter_disabled(
+        &mut problem,
+        &mut initial_values,
+        &target_model,
+        false,
+        disabled_distortions,
+    );
     // optimize
     let result = optimizer.optimize(&problem, &initial_values, None);
 
     // save result
-    let result_params = result.get("x").unwrap();
+    let result_params = result.get("params").unwrap();
     target_model.set_params(result_params);
 }
 
@@ -198,10 +223,10 @@ pub fn init_ucm(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     println!("init ucm init f {}", initial_values.get("params").unwrap());
-    println!("init rvec0{}", initial_values.get("rvec0").unwrap());
-    println!("init tvec0{}", initial_values.get("tvec0").unwrap());
-    println!("init rvec1{}", initial_values.get("rvec1").unwrap());
-    println!("init tvec1{}", initial_values.get("tvec1").unwrap());
+    // println!("init rvec0{}", initial_values.get("rvec0").unwrap());
+    // println!("init tvec0{}", initial_values.get("tvec0").unwrap());
+    // println!("init rvec1{}", initial_values.get("rvec1").unwrap());
+    // println!("init tvec1{}", initial_values.get("tvec1").unwrap());
 
     // optimize
     init_focal_alpha_problem.set_variable_bounds("params", 0, init_f / 3.0, init_f * 3.0);
@@ -213,10 +238,10 @@ pub fn init_ucm(
         "params after {:?}\n",
         second_round_values.get("params").unwrap()
     );
-    println!("after rvec0{}", second_round_values.get("rvec0").unwrap());
-    println!("after tvec0{}", second_round_values.get("tvec0").unwrap());
-    println!("after rvec1{}", second_round_values.get("rvec1").unwrap());
-    println!("after tvec1{}", second_round_values.get("tvec1").unwrap());
+    // println!("after rvec0{}", second_round_values.get("rvec0").unwrap());
+    // println!("after tvec0{}", second_round_values.get("tvec0").unwrap());
+    // println!("after rvec1{}", second_round_values.get("rvec1").unwrap());
+    // println!("after tvec1{}", second_round_values.get("tvec1").unwrap());
     // panic!("stop");
 
     let focal = second_round_values["params"][0];
@@ -229,74 +254,95 @@ pub fn init_ucm(
     ));
     second_round_values.remove("params");
     calib_camera(
-        &[frame_feature0.clone(), frame_feature1.clone()],
+        &[Some(frame_feature0.clone()), Some(frame_feature1.clone())],
         &ucm_camera,
+        true,
+        0,
     )
     .0
 }
 
 pub fn calib_camera(
-    frame_feature_list: &[FrameFeature],
+    frame_feature_list: &[Option<FrameFeature>],
     generic_camera: &GenericModel<f64>,
+    xy_same_focal: bool,
+    disabled_distortions: usize,
 ) -> (GenericModel<f64>, Vec<RvecTvec>) {
-    let params = generic_camera.params();
+    let mut params = generic_camera.params();
+    if xy_same_focal {
+        // remove fy
+        params = params.remove_row(1);
+    };
     let params_len = params.len();
-    let mut problem = tiny_solver::Problem::new();
     let mut initial_values =
         HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)]);
     debug!("init {:?}", initial_values);
+    let mut problem = tiny_solver::Problem::new();
     let mut valid_indexes = Vec::new();
     for (i, frame_feature) in frame_feature_list.iter().enumerate() {
-        let mut p3ds = Vec::new();
-        let mut p2ds = Vec::new();
-        let rvec_name = format!("rvec{}", i);
-        let tvec_name = format!("tvec{}", i);
-        for fp in frame_feature.features.values() {
-            let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d);
-            problem.add_residual_block(
-                2,
-                vec![
-                    ("params".to_string(), params_len),
-                    (rvec_name.clone(), 3),
-                    (tvec_name.clone(), 3),
-                ],
-                Box::new(cost),
-                Some(Box::new(HuberLoss::new(1.0))),
-            );
-            p3ds.push(fp.p3d);
-            p2ds.push(na::Vector2::new(fp.p2d.x as f64, fp.p2d.y as f64));
-        }
-        let undistorted = generic_camera.unproject(&p2ds);
-        let (p3ds, p2ds_z): (Vec<_>, Vec<_>) = undistorted
-            .iter()
-            .zip(p3ds)
-            .filter_map(|(p2, p3)| {
-                p2.as_ref()
-                    .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
-            })
-            .unzip();
-        // if p3ds.len() < 6 {
-        //     println!("skip frame {}", i);
-        //     continue;
-        // }
-        valid_indexes.push(i);
-        let (rvec, tvec) =
-            rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
+        if let Some(frame_feature) = frame_feature {
+            let mut p3ds = Vec::new();
+            let mut p2ds = Vec::new();
+            let rvec_name = format!("rvec{}", i);
+            let tvec_name = format!("tvec{}", i);
+            for fp in frame_feature.features.values() {
+                let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
+                problem.add_residual_block(
+                    2,
+                    vec![
+                        ("params".to_string(), params_len),
+                        (rvec_name.clone(), 3),
+                        (tvec_name.clone(), 3),
+                    ],
+                    Box::new(cost),
+                    Some(Box::new(HuberLoss::new(1.0))),
+                );
+                p3ds.push(fp.p3d);
+                p2ds.push(na::Vector2::new(fp.p2d.x as f64, fp.p2d.y as f64));
+            }
+            let undistorted = generic_camera.unproject(&p2ds);
+            let (p3ds, p2ds_z): (Vec<_>, Vec<_>) = undistorted
+                .iter()
+                .zip(p3ds)
+                .filter_map(|(p2, p3)| {
+                    p2.as_ref()
+                        .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
+                })
+                .unzip();
+            // if p3ds.len() < 6 {
+            //     println!("skip frame {}", i);
+            //     continue;
+            // }
+            valid_indexes.push(i);
+            let (rvec, tvec) =
+                rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
 
-        initial_values.entry(rvec_name).or_insert(rvec);
-        initial_values.entry(tvec_name).or_insert(tvec);
+            initial_values.entry(rvec_name).or_insert(rvec);
+            initial_values.entry(tvec_name).or_insert(tvec);
+        }
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
-    let initial_values = optimizer.optimize(&problem, &initial_values, None);
+    // let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
-    set_problem_parameter_bound(&mut problem, generic_camera);
+    set_problem_parameter_bound(&mut problem, generic_camera, xy_same_focal);
+    set_problem_parameter_disabled(
+        &mut problem,
+        &mut initial_values,
+        &generic_camera,
+        false,
+        disabled_distortions,
+    );
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
-    let new_params = result.get("params").unwrap();
+    let mut new_params = result.get("params").unwrap().clone();
+    if xy_same_focal {
+        // remove fy
+        new_params = new_params.clone().insert_row(1, new_params[0]);
+    };
     println!("params {}", new_params);
     let mut calibrated_camera = *generic_camera;
-    calibrated_camera.set_params(new_params);
+    calibrated_camera.set_params(&new_params);
     let rtvec_vec: Vec<_> = valid_indexes
         .iter()
         .map(|&i| {

@@ -21,7 +21,7 @@ fn main() {
         source_model.width().round() as u32,
         source_model.height().round() as u32,
     ));
-    convert_model(&source_model, &mut target_model);
+    convert_model(&source_model, &mut target_model, 0);
     model_to_json("ucm.json", &target_model);
     let new_w_h = 1024;
     let p = target_model.estimate_new_camera_matrix_for_undistort(1.0, Some((new_w_h, new_w_h)));
