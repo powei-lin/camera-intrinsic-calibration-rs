@@ -34,6 +34,20 @@ fn set_problem_parameter_bound(
         problem.set_variable_bounds("params", distortion_idx - shift, lower, upper);
     }
 }
+fn set_problem_parameter_disabled(
+    problem: &mut tiny_solver::Problem,
+    init_values: &mut HashMap<String, na::DVector<f64>>,
+    generic_camera: &GenericModel<f64>,
+    xy_same_focal: bool,
+    disabled_distortions: usize,
+) {
+    let shift = if xy_same_focal { 1 } else { 0 };
+    for i in 0..disabled_distortions {
+        let distortion_idx = generic_camera.params().len() - 1 - shift - i;
+        problem.fix_variable("params", distortion_idx);
+        init_values.get_mut("params").unwrap()[distortion_idx] = 0.0;
+    }
+}
 
 fn features_avg_center(features: &HashMap<u32, FeaturePoint>) -> glam::Vec2 {
     features
@@ -107,13 +121,17 @@ pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) ->
     (v1.last().unwrap().0, v0.last().unwrap().0)
 }
 
-pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut GenericModel<f64>) {
+pub fn convert_model(
+    source_model: &GenericModel<f64>,
+    target_model: &mut GenericModel<f64>,
+    disabled_distortions: usize,
+) {
     let mut problem = tiny_solver::Problem::new();
     let edge_pixels = source_model.width().max(source_model.height()) as u32 / 100;
     let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, 3);
     problem.add_residual_block(
         cost.residaul_num(),
-        vec![("x".to_string(), target_model.params().len())],
+        vec![("params".to_string(), target_model.params().len())],
         Box::new(cost),
         Some(Box::new(HuberLoss::new(1.0))),
     );
@@ -122,20 +140,26 @@ pub fn convert_model(source_model: &GenericModel<f64>, target_model: &mut Generi
     let mut target_params_init = target_model.params();
     target_params_init.rows_mut(0, 4).copy_from(&camera_params);
 
-    let initial_values =
-        HashMap::<String, na::DVector<f64>>::from([("x".to_string(), target_params_init)]);
+    let mut initial_values =
+        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), target_params_init)]);
 
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     // distortion parameter bound
     set_problem_parameter_bound(&mut problem, target_model, false);
-
+    set_problem_parameter_disabled(
+        &mut problem,
+        &mut initial_values,
+        &target_model,
+        false,
+        disabled_distortions,
+    );
     // optimize
     let result = optimizer.optimize(&problem, &initial_values, None);
 
     // save result
-    let result_params = result.get("x").unwrap();
+    let result_params = result.get("params").unwrap();
     target_model.set_params(result_params);
 }
 
@@ -233,6 +257,7 @@ pub fn init_ucm(
         &[Some(frame_feature0.clone()), Some(frame_feature1.clone())],
         &ucm_camera,
         true,
+        0,
     )
     .0
 }
@@ -241,6 +266,7 @@ pub fn calib_camera(
     frame_feature_list: &[Option<FrameFeature>],
     generic_camera: &GenericModel<f64>,
     xy_same_focal: bool,
+    disabled_distortions: usize,
 ) -> (GenericModel<f64>, Vec<RvecTvec>) {
     let mut params = generic_camera.params();
     if xy_same_focal {
@@ -297,9 +323,16 @@ pub fn calib_camera(
     }
 
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
-    let initial_values = optimizer.optimize(&problem, &initial_values, None);
+    // let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
     set_problem_parameter_bound(&mut problem, generic_camera, xy_same_focal);
+    set_problem_parameter_disabled(
+        &mut problem,
+        &mut initial_values,
+        &generic_camera,
+        false,
+        disabled_distortions,
+    );
     let mut result = optimizer.optimize(&problem, &initial_values, None);
 
     let mut new_params = result.get("params").unwrap().clone();

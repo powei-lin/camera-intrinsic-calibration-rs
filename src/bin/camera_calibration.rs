@@ -57,6 +57,9 @@ struct CCRSCli {
 
     #[arg(long, action)]
     one_focal: bool,
+
+    #[arg(long, default_value_t = 0)]
+    disabled_distortion_num: usize,
 }
 
 fn main() {
@@ -152,13 +155,18 @@ fn main() {
         initial_camera.width().round() as u32,
         initial_camera.height().round() as u32,
     );
-    convert_model(&initial_camera, &mut final_model);
+    convert_model(
+        &initial_camera,
+        &mut final_model,
+        cli.disabled_distortion_num,
+    );
     println!("Converted {:?}", final_model);
 
     let (final_result, _rtvec_list) = calib_camera(
         &cams_detected_feature_frames[0],
         &final_model,
         cli.one_focal,
+        cli.disabled_distortion_num,
     );
     println!("Final {:?}", final_result);
     model_to_json(&cli.output_json, &final_result);
