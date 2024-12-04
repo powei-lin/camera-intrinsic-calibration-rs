@@ -32,6 +32,14 @@ ccrs dataset-calib-cam1_1024_16 --model eucm
             │   └── {time_stamp}.png
             └── data.csv
     ```
+* General `--dataset-format general`
+    ```
+    dataset_root
+    └── cam0
+        ├── any_file_name.png
+        ├── any_file_name.png
+        └── any_file_name.png
+    ```
 ### Camera models
 * Extended Unified (EUCM)
 * Extended Unified with Tangential (EUCMT)
