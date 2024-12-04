@@ -45,7 +45,14 @@ fn set_problem_parameter_disabled(
     for i in 0..disabled_distortions {
         let distortion_idx = generic_camera.params().len() - 1 - shift - i;
         problem.fix_variable("params", distortion_idx);
-        init_values.get_mut("params").unwrap()[distortion_idx] = 0.0;
+        let params = init_values.get_mut("params").unwrap();
+        log::trace!(
+            "shift {} distortion {} {:?}",
+            shift,
+            distortion_idx,
+            params.shape()
+        );
+        params[distortion_idx] = 0.0;
     }
 }
 
@@ -151,7 +158,7 @@ pub fn convert_model(
     set_problem_parameter_disabled(
         &mut problem,
         &mut initial_values,
-        &target_model,
+        target_model,
         false,
         disabled_distortions,
     );
@@ -329,8 +336,8 @@ pub fn calib_camera(
     set_problem_parameter_disabled(
         &mut problem,
         &mut initial_values,
-        &generic_camera,
-        false,
+        generic_camera,
+        xy_same_focal,
         disabled_distortions,
     );
     let mut result = optimizer.optimize(&problem, &initial_values, None);
