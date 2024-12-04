@@ -12,6 +12,7 @@ use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
+use nalgebra as na;
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -167,6 +168,50 @@ fn main() {
         &final_model,
         cli.one_focal,
         cli.disabled_distortion_num,
+    );
+    let mut c: Vec<_> = cams_detected_feature_frames[0]
+        .iter()
+        .filter_map(|f| f.clone())
+        .enumerate()
+        .flat_map(|(i, f)| {
+            let tvec = na::Vector3::new(
+                _rtvec_list[i].tvec[0],
+                _rtvec_list[i].tvec[1],
+                _rtvec_list[i].tvec[2],
+            );
+            let rvec = na::Vector3::new(
+                _rtvec_list[i].rvec[0],
+                _rtvec_list[i].rvec[1],
+                _rtvec_list[i].rvec[2],
+            );
+            let transform = na::Isometry3::new(tvec, rvec);
+            let reprojection: Vec<_> = f
+                .features
+                .iter()
+                .map(|(_, feature)| {
+                    let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
+                    let p3p = transform * p3.cast();
+                    let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
+                    let p2p = final_model.project_one(&p3p);
+                    let dx = p2p.x as f32 - feature.p2d.x;
+                    let dy = p2p.y as f32 - feature.p2d.y;
+                    (dx * dx + dy * dy).sqrt()
+                })
+                .collect();
+            reprojection
+        })
+        .collect();
+
+    c.sort_by(|&a, b| a.partial_cmp(b).unwrap());
+    for &cc in &c[..200] {
+        println!("{}", cc);
+    }
+    println!(
+        "{}",
+        c.iter()
+            .take(c.len() * 7 / 10)
+            .map(|p| *p as f64 / c.len() as f64)
+            .sum::<f64>()
     );
     println!("Final {:?}", final_result);
     model_to_json(&cli.output_json, &final_result);
