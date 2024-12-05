@@ -4,16 +4,14 @@ use camera_intrinsic_calibration::board::Board;
 use camera_intrinsic_calibration::board::{
     board_config_from_json, board_config_to_json, BoardConfig,
 };
-use camera_intrinsic_calibration::data_loader::{load_euroc, load_general};
-use camera_intrinsic_calibration::optimization::*;
-use camera_intrinsic_calibration::types::RvecTvec;
+use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
-use nalgebra as na;
 use std::time::Instant;
+use time::OffsetDateTime;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum DatasetFormat {
@@ -50,8 +48,8 @@ struct CCRSCli {
     #[arg(long)]
     board_config: Option<String>,
 
-    #[arg(short, long, default_value = "output.json")]
-    output_json: String,
+    #[arg(short, long)]
+    output_folder: Option<String>,
 
     #[arg(long, value_enum, default_value = "euroc")]
     dataset_format: DatasetFormat,
@@ -61,10 +59,14 @@ struct CCRSCli {
 
     #[arg(long, default_value_t = 0)]
     disabled_distortion_num: usize,
+
+    #[arg(long)]
+    fixed_focal: Option<f64>,
 }
 
 fn main() {
     env_logger::init();
+
     let cli = CCRSCli::parse();
     let detector = TagDetector::new(&cli.tag_family, None);
     let board = if let Some(board_config_path) = cli.board_config {
@@ -76,10 +78,27 @@ fn main() {
     };
     let dataset_root = &cli.path;
     let now = Instant::now();
+    let output_folder = if let Some(output_folder) = cli.output_folder {
+        output_folder
+    } else {
+        let now = OffsetDateTime::now_local().unwrap();
+        format!(
+            "results/{}{:02}{:02}_{:02}_{:02}_{:02}",
+            now.year(),
+            now.month() as u8,
+            now.day(),
+            now.hour(),
+            now.minute(),
+            now.second(),
+        )
+    };
+    std::fs::create_dir_all(&output_folder).expect("Valid path");
+
     let recording = rerun::RecordingStreamBuilder::new("calibration")
-        .save("output.rrd")
+        .save(&format!("{}/logging.rrd", output_folder))
         .unwrap();
     trace!("Start loading data");
+    println!("Start loading images and detecting charts.");
     let mut cams_detected_feature_frames = match cli.dataset_format {
         DatasetFormat::Euroc => load_euroc(
             dataset_root,
@@ -90,7 +109,7 @@ fn main() {
             cli.cam_num,
             Some(&recording),
         ),
-        DatasetFormat::General => load_general(
+        DatasetFormat::General => load_others(
             dataset_root,
             &detector,
             &board,
@@ -118,39 +137,28 @@ fn main() {
     let frame_feature1 = &cams_detected_feature_frames[0][frame1].clone().unwrap();
 
     let key_frames = vec![Some(frame_feature0.clone()), Some(frame_feature1.clone())];
-    log_feature_frames(&recording, "/cam0/key", &key_frames);
+    key_frames.iter().enumerate().for_each(|(i, k)| {
+        let topic = format!("/cam0/keyframe{}", i);
+        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
+        recording
+            .log(topic, &rerun::TextLog::new("keyframe"))
+            .unwrap();
+    });
 
-    // initialize focal length and undistorted p2d for init poses
-    let (lambda, h_mat) = radial_distortion_homography(frame_feature0, frame_feature1);
-    // focal
-    let f_option = homography_to_focal(&h_mat);
-    if f_option.is_none() {
+    let mut initial_camera = GenericModel::UCM(UCM::zeros());
+    for i in 0..10 {
+        trace!("Initialize ucm {}", i);
+        if let Some(initialized_ucm) =
+            try_init_camera(frame_feature0, frame_feature1, cli.fixed_focal)
+        {
+            initial_camera = initialized_ucm;
+            break;
+        }
+    }
+    if initial_camera.params()[0] == 0.0 {
+        println!("calibration failed.");
         return;
     }
-    let focal = f_option.unwrap();
-    println!("focal {}", focal);
-
-    // poses
-    let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
-    let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
-    let rtvec0 = RvecTvec::new(rvec0, tvec0);
-    let rtvec1 = RvecTvec::new(rvec1, tvec1);
-
-    let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
-    let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
-    let half_img_size = half_h.max(half_w);
-    let init_f = focal as f64 * half_img_size;
-    println!("init f {}", init_f);
-    let init_alpha = lambda.abs() as f64;
-    let initial_camera = init_ucm(
-        frame_feature0,
-        frame_feature1,
-        &rtvec0,
-        &rtvec1,
-        init_f,
-        init_alpha,
-    );
-    println!("Initialized {:?}", initial_camera);
     let mut final_model = cli.model;
     final_model.set_w_h(
         initial_camera.width().round() as u32,
@@ -162,57 +170,33 @@ fn main() {
         cli.disabled_distortion_num,
     );
     println!("Converted {:?}", final_model);
+    let (one_focal, fixed_focal) = if let Some(focal) = cli.fixed_focal {
+        // if fixed focal then set one focal true
+        let mut p = final_model.params();
+        p[0] = focal;
+        p[1] = focal;
+        final_model.set_params(&p);
+        (true, true)
+    } else {
+        (cli.one_focal, false)
+    };
 
-    let (final_result, _rtvec_list) = calib_camera(
+    let (final_result, rtvec_list) = calib_camera(
         &cams_detected_feature_frames[0],
         &final_model,
-        cli.one_focal,
+        one_focal,
         cli.disabled_distortion_num,
+        fixed_focal,
     );
-    let mut c: Vec<_> = cams_detected_feature_frames[0]
-        .iter()
-        .filter_map(|f| f.clone())
-        .enumerate()
-        .flat_map(|(i, f)| {
-            let tvec = na::Vector3::new(
-                _rtvec_list[i].tvec[0],
-                _rtvec_list[i].tvec[1],
-                _rtvec_list[i].tvec[2],
-            );
-            let rvec = na::Vector3::new(
-                _rtvec_list[i].rvec[0],
-                _rtvec_list[i].rvec[1],
-                _rtvec_list[i].rvec[2],
-            );
-            let transform = na::Isometry3::new(tvec, rvec);
-            let reprojection: Vec<_> = f
-                .features
-                .iter()
-                .map(|(_, feature)| {
-                    let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
-                    let p3p = transform * p3.cast();
-                    let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
-                    let p2p = final_model.project_one(&p3p);
-                    let dx = p2p.x as f32 - feature.p2d.x;
-                    let dy = p2p.y as f32 - feature.p2d.y;
-                    (dx * dx + dy * dy).sqrt()
-                })
-                .collect();
-            reprojection
-        })
-        .collect();
-
-    c.sort_by(|&a, b| a.partial_cmp(b).unwrap());
-    for &cc in &c[..200] {
-        println!("{}", cc);
-    }
+    validation(
+        &final_result,
+        &rtvec_list,
+        &cams_detected_feature_frames[0],
+        Some(&recording),
+    );
     println!(
-        "{}",
-        c.iter()
-            .take(c.len() * 7 / 10)
-            .map(|p| *p as f64 / c.len() as f64)
-            .sum::<f64>()
+        "Final params{}",
+        serde_json::to_string_pretty(&final_result).unwrap()
     );
-    println!("Final {:?}", final_result);
-    model_to_json(&cli.output_json, &final_result);
+    model_to_json(&format!("{}/result.json", output_folder), &final_result);
 }

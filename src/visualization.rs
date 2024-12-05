@@ -75,7 +75,7 @@ pub fn log_feature_frames(
                 &rerun::Points2D::new(pts)
                     .with_colors(colors)
                     .with_labels(labels)
-                    .with_radii([rerun::Radius::new_ui_points(5.0)]),
+                    .with_radii([rerun::Radius::new_ui_points(2.0)]),
             )
             .unwrap();
     }

@@ -92,7 +92,7 @@ pub fn load_euroc(
         .collect()
 }
 
-pub fn load_general(
+pub fn load_others(
     root_folder: &str,
     tag_detector: &TagDetector,
     board: &board::Board,
@@ -104,8 +104,8 @@ pub fn load_general(
     const MIN_CORNERS: usize = 24;
     (0..cam_num)
         .map(|cam_idx| {
-            let img_paths =
-                glob(format!("{}/cam{}/**/*.png", root_folder, cam_idx).as_str()).expect("failed");
+            let img_paths = glob(format!("{}/**/cam{}/**/*.png", root_folder, cam_idx).as_str())
+                .expect("failed");
             img_paths
                 .skip(start_idx)
                 .step_by(step)
