@@ -95,7 +95,7 @@ fn main() {
     std::fs::create_dir_all(&output_folder).expect("Valid path");
 
     let recording = rerun::RecordingStreamBuilder::new("calibration")
-        .save(&format!("{}/logging.rrd", output_folder))
+        .save(format!("{}/logging.rrd", output_folder))
         .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
@@ -136,7 +136,7 @@ fn main() {
     let frame_feature0 = &cams_detected_feature_frames[0][frame0].clone().unwrap();
     let frame_feature1 = &cams_detected_feature_frames[0][frame1].clone().unwrap();
 
-    let key_frames = vec![Some(frame_feature0.clone()), Some(frame_feature1.clone())];
+    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
     key_frames.iter().enumerate().for_each(|(i, k)| {
         let topic = format!("/cam0/keyframe{}", i);
         recording.set_time_nanos("stable", k.clone().unwrap().time_ns);

@@ -455,9 +455,7 @@ pub fn validation(
             );
             let transform = na::Isometry3::new(tvec, rvec);
             let reprojection: Vec<_> = f
-                .features
-                .iter()
-                .map(|(_, feature)| {
+                .features.values().map(|feature| {
                     let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
                     let p3p = transform * p3.cast();
                     let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
@@ -469,9 +467,7 @@ pub fn validation(
                 .collect();
             if let Some(recording) = recording_option {
                 let p3p_rerun: Vec<_> = f
-                    .features
-                    .iter()
-                    .map(|(_, feature)| {
+                    .features.values().map(|feature| {
                         let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
                         let p3p = transform.cast() * p3;
                         (p3p.x, p3p.y, p3p.z)
