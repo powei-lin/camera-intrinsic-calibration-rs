@@ -2,7 +2,9 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
+use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
 use crate::types::RvecTvec;
+use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
 use camera_intrinsic_model::*;
@@ -82,6 +84,59 @@ fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
     let v = v0 - v1;
     v.x * v.x + v.y * v.y
 }
+pub fn try_init_camera(
+    frame_feature0: &FrameFeature,
+    frame_feature1: &FrameFeature,
+    fixed_focal: Option<f64>,
+) -> Option<GenericModel<f64>> {
+    // initialize focal length and undistorted p2d for init poses
+    let (lambda, h_mat) = radial_distortion_homography(frame_feature0, frame_feature1);
+
+    // focal
+    let f_option = homography_to_focal(&h_mat);
+    if f_option.is_none() {
+        println!("Initialization failed, try again.");
+        return None;
+    }
+    let unit_plane_focal = f_option.unwrap() as f64;
+    println!("focal {}", unit_plane_focal);
+
+    // poses
+    let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
+    let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
+    let rtvec0 = RvecTvec::new(rvec0, tvec0);
+    let rtvec1 = RvecTvec::new(rvec1, tvec1);
+
+    let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
+    let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
+    let half_img_size = half_h.max(half_w);
+    let init_f = if let Some(focal) = fixed_focal {
+        focal
+    } else {
+        unit_plane_focal * half_img_size
+    };
+    println!("init f {}", init_f);
+    let init_alpha = lambda.abs() as f64;
+    if let Some(initial_camera) = init_ucm(
+        frame_feature0,
+        frame_feature1,
+        &rtvec0,
+        &rtvec1,
+        init_f,
+        init_alpha,
+        fixed_focal.is_some(),
+    ) {
+        println!("Initialized {:?}", initial_camera);
+        if initial_camera.params()[0] == 0.0 {
+            println!("Failed to initialize UCM. Try again.");
+            None
+        } else {
+            Some(initial_camera)
+        }
+    } else {
+        None
+    }
+}
 
 pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) -> (usize, usize) {
     let mut max_detection = 0;
@@ -135,7 +190,8 @@ pub fn convert_model(
 ) {
     let mut problem = tiny_solver::Problem::new();
     let edge_pixels = source_model.width().max(source_model.height()) as u32 / 100;
-    let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, 3);
+    let steps = source_model.width().max(source_model.height()) / 30.0;
+    let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, steps as usize);
     problem.add_residual_block(
         cost.residaul_num(),
         vec![("params".to_string(), target_model.params().len())],
@@ -163,7 +219,7 @@ pub fn convert_model(
         disabled_distortions,
     );
     // optimize
-    let result = optimizer.optimize(&problem, &initial_values, None);
+    let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
 
     // save result
     let result_params = result.get("params").unwrap();
@@ -177,7 +233,8 @@ pub fn init_ucm(
     rtvec1: &RvecTvec,
     init_f: f64,
     init_alpha: f64,
-) -> GenericModel<f64> {
+    fixed_focal: bool,
+) -> Option<GenericModel<f64>> {
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
     let init_params = na::dvector![init_f, init_f, half_w, half_h, init_alpha];
@@ -228,6 +285,9 @@ pub fn init_ucm(
 
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    if fixed_focal {
+        init_focal_alpha_problem.fix_variable("params", 0);
+    }
 
     println!("init ucm init f {}", initial_values.get("params").unwrap());
     // println!("init rvec0{}", initial_values.get("rvec0").unwrap());
@@ -238,35 +298,36 @@ pub fn init_ucm(
     // optimize
     init_focal_alpha_problem.set_variable_bounds("params", 0, init_f / 3.0, init_f * 3.0);
     init_focal_alpha_problem.set_variable_bounds("params", 1, 1e-6, 1.0);
-    let mut second_round_values =
-        optimizer.optimize(&init_focal_alpha_problem, &initial_values, None);
+    if let Some(mut second_round_values) =
+        optimizer.optimize(&init_focal_alpha_problem, &initial_values, None)
+    {
+        println!(
+            "params after {:?}\n",
+            second_round_values.get("params").unwrap()
+        );
 
-    println!(
-        "params after {:?}\n",
-        second_round_values.get("params").unwrap()
-    );
-    // println!("after rvec0{}", second_round_values.get("rvec0").unwrap());
-    // println!("after tvec0{}", second_round_values.get("tvec0").unwrap());
-    // println!("after rvec1{}", second_round_values.get("rvec1").unwrap());
-    // println!("after tvec1{}", second_round_values.get("tvec1").unwrap());
-    // panic!("stop");
-
-    let focal = second_round_values["params"][0];
-    let alpha = second_round_values["params"][1];
-    let ucm_all_params = na::dvector![focal, focal, half_w, half_h, alpha];
-    let ucm_camera = GenericModel::UCM(UCM::new(
-        &ucm_all_params,
-        frame_feature0.img_w_h.0,
-        frame_feature0.img_w_h.1,
-    ));
-    second_round_values.remove("params");
-    calib_camera(
-        &[Some(frame_feature0.clone()), Some(frame_feature1.clone())],
-        &ucm_camera,
-        true,
-        0,
-    )
-    .0
+        let focal = second_round_values["params"][0];
+        let alpha = second_round_values["params"][1];
+        let ucm_all_params = na::dvector![focal, focal, half_w, half_h, alpha];
+        let ucm_camera = GenericModel::UCM(UCM::new(
+            &ucm_all_params,
+            frame_feature0.img_w_h.0,
+            frame_feature0.img_w_h.1,
+        ));
+        second_round_values.remove("params");
+        Some(
+            calib_camera(
+                &[Some(frame_feature0.clone()), Some(frame_feature1.clone())],
+                &ucm_camera,
+                true,
+                0,
+                fixed_focal,
+            )
+            .0,
+        )
+    } else {
+        None
+    }
 }
 
 pub fn calib_camera(
@@ -274,6 +335,7 @@ pub fn calib_camera(
     generic_camera: &GenericModel<f64>,
     xy_same_focal: bool,
     disabled_distortions: usize,
+    fixed_focal: bool,
 ) -> (GenericModel<f64>, Vec<RvecTvec>) {
     let mut params = generic_camera.params();
     if xy_same_focal {
@@ -340,7 +402,13 @@ pub fn calib_camera(
         xy_same_focal,
         disabled_distortions,
     );
-    let mut result = optimizer.optimize(&problem, &initial_values, None);
+    let mut result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+    if fixed_focal {
+        println!("set focal and opt again.");
+        problem.fix_variable("params", 0);
+        result.get_mut("params").unwrap()[0] = generic_camera.params()[0];
+        result = optimizer.optimize(&problem, &result, None).unwrap();
+    }
 
     let mut new_params = result.get("params").unwrap().clone();
     if xy_same_focal {
@@ -363,4 +431,112 @@ pub fn calib_camera(
         })
         .collect();
     (calibrated_camera, rtvec_vec)
+}
+
+pub fn validation(
+    final_result: &GenericModel<f64>,
+    rtvec_list: &[RvecTvec],
+    detected_feature_frames: &[Option<FrameFeature>],
+    recording_option: Option<&rerun::RecordingStream>,
+) {
+    let time_reprojection_errors_p2ds: Vec<_> = detected_feature_frames
+        .iter()
+        .filter_map(|f| f.clone())
+        .enumerate()
+        .map(|(i, f)| {
+            let tvec = na::Vector3::new(
+                rtvec_list[i].tvec[0],
+                rtvec_list[i].tvec[1],
+                rtvec_list[i].tvec[2],
+            );
+            let rvec = na::Vector3::new(
+                rtvec_list[i].rvec[0],
+                rtvec_list[i].rvec[1],
+                rtvec_list[i].rvec[2],
+            );
+            let transform = na::Isometry3::new(tvec, rvec);
+            let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
+                .features
+                .values()
+                .map(|feature| {
+                    let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
+                    let p3p = transform * p3.cast();
+                    let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
+                    let p2p = final_result.project_one(&p3p);
+                    let dx = p2p.x - feature.p2d.x as f64;
+                    let dy = p2p.y - feature.p2d.y as f64;
+                    ((dx * dx + dy * dy).sqrt(), (feature.p2d.x, feature.p2d.y))
+                })
+                .unzip();
+            if let Some(recording) = recording_option {
+                let p3p_rerun: Vec<_> = f
+                    .features
+                    .values()
+                    .map(|feature| {
+                        let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
+                        let p3p = transform.cast() * p3;
+                        (p3p.x, p3p.y, p3p.z)
+                    })
+                    .collect();
+                recording.set_time_nanos("stable", f.time_ns);
+                recording
+                    .log("/board", &rerun::Points3D::new(p3p_rerun))
+                    .unwrap();
+                recording
+                    .log("/camera_coordinate", &rerun::Transform3D::IDENTITY)
+                    .unwrap();
+                let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
+                recording
+                    .log(
+                        "/board/reprojection_err",
+                        &rerun::TextLog::new(format!("{} px", avg_err)),
+                    )
+                    .unwrap();
+            };
+            (f.time_ns, reprojection, p2ds)
+        })
+        .collect();
+    let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
+        .iter()
+        .flat_map(|f| f.1.clone())
+        .collect();
+    println!("total pts: {}", reprojection_errors.len());
+    reprojection_errors.sort_by(|&a, b| a.partial_cmp(b).unwrap());
+    println!(
+        "Median reprojection error: {} px",
+        reprojection_errors[reprojection_errors.len() / 2]
+    );
+    let len_99_percent = reprojection_errors.len() * 99 / 100;
+    let avg_99_percent = reprojection_errors
+        .iter()
+        .take(len_99_percent)
+        .map(|p| *p / len_99_percent as f64)
+        .sum::<f64>();
+    println!("Avg reprojection error of 99%: {} px", avg_99_percent);
+    if let Some(recording) = recording_option {
+        let color_gradient = colorous::ORANGE_RED;
+        let min_v = 0.2;
+        for (time_ns, reps, p2ds) in &time_reprojection_errors_p2ds {
+            let (colors, text): (Vec<_>, Vec<_>) = reps
+                .iter()
+                .zip(p2ds)
+                .map(|(&r, _)| {
+                    let v = (r - min_v).max(0.0).min(1.0);
+                    let c = color_gradient.eval_continuous(v);
+                    ((c.r, c.g, c.b, 255), format!("{}", r))
+                })
+                .unzip();
+            recording.set_time_nanos("stable", *time_ns);
+
+            recording
+                .log(
+                    "/detected",
+                    &rerun::Points2D::new(rerun_shift(p2ds))
+                        .with_colors(colors)
+                        .with_radii([rerun::Radius::new_ui_points(1.0)])
+                        .with_labels(text),
+                )
+                .unwrap();
+        }
+    }
 }

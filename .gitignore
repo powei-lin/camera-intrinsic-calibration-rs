@@ -28,3 +28,4 @@ Cargo.lock
 remaped.png
 .DS_Store
 output.json
+results/
