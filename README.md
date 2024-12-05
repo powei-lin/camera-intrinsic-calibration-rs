@@ -3,11 +3,16 @@
 
 A pure rust camera intrinsic calibration library.
 
-## CLI Usage
+## Installation
 ```sh
 # install cli
 cargo install camera-intrinsic-calibration
+```
+Or download from the latest [release](https://github.com/powei-lin/camera-intrinsic-calibration-rs/releases).
 
+## CLI Usage
+```sh
+# camera-calibration-rs
 ccrs -h
 
 # run intrinsic calibration on TUM vi dataset
