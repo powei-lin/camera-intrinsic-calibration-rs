@@ -17,7 +17,14 @@ tar xvzf dataset-calib-cam1_1024_16.tar
 
 # [Optional] export RUST_LOG=trace
 ccrs dataset-calib-cam1_1024_16 --model eucm
+
 ```
+### Visualize details after calibration
+```sh
+cargo install rerun-cli --version 0.17.0
+rerun results/20YYMMDD_HH_MM_SS/logging.rrd
+```
+<img src="data/rerun_logs.jpg" width="800" alt="example detection">
 
 ## Supported formats
 ### Dataset format
