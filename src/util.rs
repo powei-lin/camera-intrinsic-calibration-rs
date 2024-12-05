@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
 use crate::types::RvecTvec;
+use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
 use camera_intrinsic_model::*;
@@ -438,11 +439,11 @@ pub fn validation(
     detected_feature_frames: &[Option<FrameFeature>],
     recording_option: Option<&rerun::RecordingStream>,
 ) {
-    let mut reprojection_errors: Vec<_> = detected_feature_frames
+    let time_reprojection_errors_p2ds: Vec<_> = detected_feature_frames
         .iter()
         .filter_map(|f| f.clone())
         .enumerate()
-        .flat_map(|(i, f)| {
+        .map(|(i, f)| {
             let tvec = na::Vector3::new(
                 rtvec_list[i].tvec[0],
                 rtvec_list[i].tvec[1],
@@ -454,20 +455,24 @@ pub fn validation(
                 rtvec_list[i].rvec[2],
             );
             let transform = na::Isometry3::new(tvec, rvec);
-            let reprojection: Vec<_> = f
-                .features.values().map(|feature| {
+            let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
+                .features
+                .values()
+                .map(|feature| {
                     let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
                     let p3p = transform * p3.cast();
                     let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
                     let p2p = final_result.project_one(&p3p);
                     let dx = p2p.x - feature.p2d.x as f64;
                     let dy = p2p.y - feature.p2d.y as f64;
-                    (dx * dx + dy * dy).sqrt()
+                    ((dx * dx + dy * dy).sqrt(), (feature.p2d.x, feature.p2d.y))
                 })
-                .collect();
+                .unzip();
             if let Some(recording) = recording_option {
                 let p3p_rerun: Vec<_> = f
-                    .features.values().map(|feature| {
+                    .features
+                    .values()
+                    .map(|feature| {
                         let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
                         let p3p = transform.cast() * p3;
                         (p3p.x, p3p.y, p3p.z)
@@ -488,10 +493,13 @@ pub fn validation(
                     )
                     .unwrap();
             };
-            reprojection
+            (f.time_ns, reprojection, p2ds)
         })
         .collect();
-
+    let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
+        .iter()
+        .flat_map(|f| f.1.clone())
+        .collect();
     println!("total pts: {}", reprojection_errors.len());
     reprojection_errors.sort_by(|&a, b| a.partial_cmp(b).unwrap());
     println!(
@@ -499,12 +507,36 @@ pub fn validation(
         reprojection_errors[reprojection_errors.len() / 2]
     );
     let len_99_percent = reprojection_errors.len() * 99 / 100;
-    println!(
-        "Avg reprojection error of 99%: {} px",
-        reprojection_errors
-            .iter()
-            .take(len_99_percent)
-            .map(|p| *p / len_99_percent as f64)
-            .sum::<f64>()
-    );
+    let avg_99_percent = reprojection_errors
+        .iter()
+        .take(len_99_percent)
+        .map(|p| *p / len_99_percent as f64)
+        .sum::<f64>();
+    println!("Avg reprojection error of 99%: {} px", avg_99_percent);
+    if let Some(recording) = recording_option {
+        let color_gradient = colorous::ORANGE_RED;
+        let min_v = 0.2;
+        for (time_ns, reps, p2ds) in &time_reprojection_errors_p2ds {
+            let (colors, text): (Vec<_>, Vec<_>) = reps
+                .iter()
+                .zip(p2ds)
+                .map(|(&r, _)| {
+                    let v = (r - min_v).max(0.0).min(1.0);
+                    let c = color_gradient.eval_continuous(v);
+                    ((c.r, c.g, c.b, 255), format!("{}", r))
+                })
+                .unzip();
+            recording.set_time_nanos("stable", *time_ns);
+
+            recording
+                .log(
+                    "/detected",
+                    &rerun::Points2D::new(rerun_shift(p2ds))
+                        .with_colors(colors)
+                        .with_radii([rerun::Radius::new_ui_points(1.0)])
+                        .with_labels(text),
+                )
+                .unwrap();
+        }
+    }
 }

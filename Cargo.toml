@@ -17,6 +17,7 @@ aprilgrid = "0.4.1"
 camera-intrinsic-model = "0.3.0"
 chrono = "0.4.38"
 clap = { version = "4.5.15", features = ["derive"] }
+colorous = "1.0.15"
 env_logger = "0.11.5"
 faer = "0.19.4"
 glam = "0.29.2"
