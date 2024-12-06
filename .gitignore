@@ -29,3 +29,4 @@ remaped.png
 .DS_Store
 output.json
 results/
+default_board_config.json
