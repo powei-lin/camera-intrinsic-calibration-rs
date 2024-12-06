@@ -8,6 +8,7 @@ pub struct BoardConfig {
     tag_spacing: f32,
     tag_rows: usize,
     tag_cols: usize,
+    first_id: u32,
 }
 
 pub fn board_config_to_json(output_path: &str, board_config: &BoardConfig) {
@@ -29,6 +30,7 @@ impl Default for BoardConfig {
             tag_spacing: 0.3,
             tag_rows: 6,
             tag_cols: 6,
+            first_id: 0,
         }
     }
 }
@@ -44,6 +46,7 @@ impl Board {
             board_config.tag_spacing,
             board_config.tag_rows,
             board_config.tag_cols,
+            board_config.first_id,
         )
     }
     pub fn init_aprilgrid(
@@ -51,9 +54,10 @@ impl Board {
         tag_spacing: f32,
         tag_rows: usize,
         tag_cols: usize,
+        first_id: u32,
     ) -> Board {
         let mut id_to_3d = HashMap::new();
-        let mut count_id = 0;
+        let mut count_id = first_id * 4;
         for r in 0..tag_rows {
             for c in 0..tag_cols {
                 let start_x = (c as f32) * tag_size_meter * (1.0 + tag_spacing);
@@ -98,5 +102,5 @@ impl Board {
 }
 
 pub fn create_default_6x6_board() -> Board {
-    Board::init_aprilgrid(0.088, 0.3, 6, 6)
+    Board::init_aprilgrid(0.088, 0.3, 6, 6, 0)
 }

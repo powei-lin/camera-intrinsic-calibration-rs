@@ -1,6 +1,7 @@
 {
   "tag_size_meter": 0.088,
   "tag_spacing": 0.3,
-  "tag_rows": 5,
-  "tag_cols": 9
+  "tag_rows": 6,
+  "tag_cols": 6,
+  "first_id": 0
 }
