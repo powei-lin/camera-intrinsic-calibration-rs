@@ -250,4 +250,7 @@ fn main() {
             (final_result, rtvec_map)
         })
         .unzip();
+    if _calibrated_intrinsics.len() > 1 {
+        init_camera_extrinsic(&_cam_rtvecs);
+    }
 }

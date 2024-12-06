@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
@@ -451,6 +451,50 @@ pub fn calib_camera(
         })
         .collect();
     Some((calibrated_camera, rtvec_vec))
+}
+
+pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) {
+    for cam_i in 1..cam_rtvecs.len() {
+        let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
+        let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
+        let key_intersection = cam_0_keys.intersection(&cam_i_keys);
+        let t_0_b_and_t_i_b: Vec<_> = key_intersection
+            .into_iter()
+            .map(|k| {
+                let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
+                let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
+                (t_0_b, t_i_b)
+            })
+            .collect();
+        let mut problem = tiny_solver::Problem::new();
+        for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
+            let cost = SE3Factor::new(t_0_b, t_i_b);
+            problem.add_residual_block(
+                6,
+                vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
+                Box::new(cost),
+                Some(Box::new(HuberLoss::new(1.0))),
+            );
+        }
+        let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
+        let rvec_i_0_init = t_i_0_init.rotation.scaled_axis();
+        let rvec = na::dvector![rvec_i_0_init[0], rvec_i_0_init[1], rvec_i_0_init[2]];
+        let tvec = na::dvector![
+            t_i_0_init.translation.x,
+            t_i_0_init.translation.y,
+            t_i_0_init.translation.z,
+        ];
+        let initial_values = HashMap::<String, na::DVector<f64>>::from([
+            ("rvec".to_string(), rvec),
+            ("tvec".to_string(), tvec),
+        ]);
+
+        let optimizer = tiny_solver::GaussNewtonOptimizer {};
+        let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+        println!("extrinsic cam{} cam0", cam_i);
+        println!("rvec: {}", result["rvec"]);
+        println!("tvec: {}", result["tvec"]);
+    }
 }
 
 pub fn validation(

@@ -180,3 +180,46 @@ impl Factor for ReprojectionFactor {
         ]
     }
 }
+
+pub struct SE3Factor {
+    pub t_0_b: na::Isometry3<DualDVec64>,
+    pub t_i_b: na::Isometry3<DualDVec64>,
+}
+
+impl SE3Factor {
+    pub fn new(t_0_b: &na::Isometry3<f64>, t_i_b: &na::Isometry3<f64>) -> SE3Factor {
+        SE3Factor {
+            t_0_b: t_0_b.cast(),
+            t_i_b: t_i_b.cast(),
+        }
+    }
+}
+
+impl Factor for SE3Factor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        let rvec = na::Vector3::new(
+            params[0][0].clone(),
+            params[0][1].clone(),
+            params[0][2].clone(),
+        );
+        let tvec = na::Vector3::new(
+            params[1][0].clone(),
+            params[1][1].clone(),
+            params[1][2].clone(),
+        );
+        let t_i_0 = na::Isometry3::new(tvec, rvec);
+        let t_diff = self.t_i_b.inverse() * t_i_0 * self.t_0_b.clone();
+        let r_diff = t_diff.rotation.scaled_axis();
+        na::dvector![
+            r_diff[0].clone(),
+            r_diff[1].clone(),
+            r_diff[2].clone(),
+            t_diff.translation.x.clone(),
+            t_diff.translation.y.clone(),
+            t_diff.translation.z.clone(),
+        ]
+    }
+}
