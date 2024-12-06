@@ -33,6 +33,12 @@ fn set_problem_parameter_bound(
     problem.set_variable_bounds("params", 2 - shift, 0.0, generic_camera.width());
     problem.set_variable_bounds("params", 3 - shift, 0.0, generic_camera.height());
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
+        log::trace!(
+            "set params bound {} {} {}",
+            distortion_idx - shift,
+            lower,
+            upper
+        );
         problem.set_variable_bounds("params", distortion_idx - shift, lower, upper);
     }
 }
@@ -188,6 +194,21 @@ pub fn convert_model(
     target_model: &mut GenericModel<f64>,
     disabled_distortions: usize,
 ) {
+    if let GenericModel::UCM(m0) = source_model {
+        if let GenericModel::EUCM(_) = target_model {
+            let params = m0.params();
+            let params = params.insert_row(5, 1.0);
+            target_model.set_params(&params);
+            return;
+        } else if let GenericModel::EUCMT(_) = target_model {
+            let params = m0.params();
+            let params = params.insert_row(5, 1.0);
+            let params = params.insert_row(6, 0.0);
+            let params = params.insert_row(7, 0.0);
+            target_model.set_params(&params);
+            return;
+        }
+    }
     let mut problem = tiny_solver::Problem::new();
     let edge_pixels = source_model.width().max(source_model.height()) as u32 / 100;
     let steps = source_model.width().max(source_model.height()) / 30.0;
@@ -290,10 +311,6 @@ pub fn init_ucm(
     }
 
     println!("init ucm init f {}", initial_values.get("params").unwrap());
-    // println!("init rvec0{}", initial_values.get("rvec0").unwrap());
-    // println!("init tvec0{}", initial_values.get("tvec0").unwrap());
-    // println!("init rvec1{}", initial_values.get("rvec1").unwrap());
-    // println!("init tvec1{}", initial_values.get("tvec1").unwrap());
 
     // optimize
     init_focal_alpha_problem.set_variable_bounds("params", 0, init_f / 3.0, init_f * 3.0);
@@ -521,7 +538,7 @@ pub fn validation(
                 .iter()
                 .zip(p2ds)
                 .map(|(&r, _)| {
-                    let v = (r - min_v).max(0.0).min(1.0);
+                    let v = (r - min_v).clamp(0.0, 1.0);
                     let c = color_gradient.eval_continuous(v);
                     ((c.r, c.g, c.b, 255), format!("{}", r))
                 })

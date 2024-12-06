@@ -97,7 +97,9 @@ fn main() {
     let recording = rerun::RecordingStreamBuilder::new("calibration")
         .save(format!("{}/logging.rrd", output_folder))
         .unwrap();
-    recording.log_static("/", &rerun::ViewCoordinates::RDF).unwrap();
+    recording
+        .log_static("/", &rerun::ViewCoordinates::RDF)
+        .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
     let mut cams_detected_feature_frames = match cli.dataset_format {
