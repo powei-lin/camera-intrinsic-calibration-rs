@@ -10,6 +10,8 @@ use glob::glob;
 use image::{DynamicImage, ImageReader};
 use rayon::prelude::*;
 
+const MIN_CORNERS: usize = 24;
+
 fn path_to_timestamp(path: &Path) -> i64 {
     let time_ns: i64 = path
         .file_stem()
@@ -66,9 +68,9 @@ pub fn load_euroc(
     cam_num: usize,
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<Vec<Option<FrameFeature>>> {
-    const MIN_CORNERS: usize = 24;
     (0..cam_num)
         .map(|cam_idx| {
+            log::trace!("loading cam{}", cam_idx);
             let img_paths =
                 glob(format!("{}/mav0/cam{}/data/*.png", root_folder, cam_idx).as_str())
                     .expect("failed");
@@ -101,11 +103,11 @@ pub fn load_others(
     cam_num: usize,
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<Vec<Option<FrameFeature>>> {
-    const MIN_CORNERS: usize = 24;
     (0..cam_num)
         .map(|cam_idx| {
             let img_paths = glob(format!("{}/**/cam{}/**/*.png", root_folder, cam_idx).as_str())
                 .expect("failed");
+            log::trace!("loading cam{}", cam_idx);
             img_paths
                 .skip(start_idx)
                 .step_by(step)

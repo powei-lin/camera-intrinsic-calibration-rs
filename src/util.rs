@@ -340,6 +340,7 @@ pub fn init_ucm(
                 0,
                 fixed_focal,
             )
+            .unwrap()
             .0,
         )
     } else {
@@ -353,7 +354,7 @@ pub fn calib_camera(
     xy_same_focal: bool,
     disabled_distortions: usize,
     fixed_focal: bool,
-) -> (GenericModel<f64>, Vec<RvecTvec>) {
+) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
     let mut params = generic_camera.params();
     if xy_same_focal {
         // remove fy
@@ -395,10 +396,6 @@ pub fn calib_camera(
                         .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
                 })
                 .unzip();
-            // if p3ds.len() < 6 {
-            //     println!("skip frame {}", i);
-            //     continue;
-            // }
             valid_indexes.push(i);
             let (rvec, tvec) =
                 rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
@@ -419,7 +416,10 @@ pub fn calib_camera(
         xy_same_focal,
         disabled_distortions,
     );
-    let mut result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+    let result_option = optimizer.optimize(&problem, &initial_values, None);
+    // check is some
+    result_option.as_ref()?;
+    let mut result = result_option.unwrap();
     if fixed_focal {
         println!("set focal and opt again.");
         problem.fix_variable("params", 0);
@@ -435,42 +435,37 @@ pub fn calib_camera(
     println!("params {}", new_params);
     let mut calibrated_camera = *generic_camera;
     calibrated_camera.set_params(&new_params);
-    let rtvec_vec: Vec<_> = valid_indexes
+    let rtvec_vec: HashMap<usize, RvecTvec> = valid_indexes
         .iter()
         .map(|&i| {
             let rvec_name = format!("rvec{}", i);
             let tvec_name = format!("tvec{}", i);
 
-            RvecTvec {
-                rvec: result.remove(&rvec_name).unwrap(),
-                tvec: result.remove(&tvec_name).unwrap(),
-            }
+            (
+                i,
+                RvecTvec {
+                    rvec: result.remove(&rvec_name).unwrap(),
+                    tvec: result.remove(&tvec_name).unwrap(),
+                },
+            )
         })
         .collect();
-    (calibrated_camera, rtvec_vec)
+    Some((calibrated_camera, rtvec_vec))
 }
 
 pub fn validation(
+    cam_idx: usize,
     final_result: &GenericModel<f64>,
-    rtvec_list: &[RvecTvec],
+    rtvec_list: &HashMap<usize, RvecTvec>,
     detected_feature_frames: &[Option<FrameFeature>],
     recording_option: Option<&rerun::RecordingStream>,
 ) {
-    let time_reprojection_errors_p2ds: Vec<_> = detected_feature_frames
+    let time_reprojection_errors_p2ds: Vec<_> = rtvec_list
         .iter()
-        .filter_map(|f| f.clone())
-        .enumerate()
-        .map(|(i, f)| {
-            let tvec = na::Vector3::new(
-                rtvec_list[i].tvec[0],
-                rtvec_list[i].tvec[1],
-                rtvec_list[i].tvec[2],
-            );
-            let rvec = na::Vector3::new(
-                rtvec_list[i].rvec[0],
-                rtvec_list[i].rvec[1],
-                rtvec_list[i].rvec[2],
-            );
+        .map(|(&i, rtvec)| {
+            let f = detected_feature_frames[i].clone().unwrap();
+            let tvec = na::Vector3::new(rtvec.tvec[0], rtvec.tvec[1], rtvec.tvec[2]);
+            let rvec = na::Vector3::new(rtvec.rvec[0], rtvec.rvec[1], rtvec.rvec[2]);
             let transform = na::Isometry3::new(tvec, rvec);
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
                 .features
@@ -513,6 +508,63 @@ pub fn validation(
             (f.time_ns, reprojection, p2ds)
         })
         .collect();
+    // detected_feature_frames
+    //     .iter()
+    //     .filter_map(|f| f.clone())
+    //     .enumerate()
+    //     .map(|(i, f)| {
+    //         let tvec = na::Vector3::new(
+    //             rtvec_list[i].tvec[0],
+    //             rtvec_list[i].tvec[1],
+    //             rtvec_list[i].tvec[2],
+    //         );
+    //         let rvec = na::Vector3::new(
+    //             rtvec_list[i].rvec[0],
+    //             rtvec_list[i].rvec[1],
+    //             rtvec_list[i].rvec[2],
+    //         );
+    //         let transform = na::Isometry3::new(tvec, rvec);
+    //         let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
+    //             .features
+    //             .values()
+    //             .map(|feature| {
+    //                 let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
+    //                 let p3p = transform * p3.cast();
+    //                 let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
+    //                 let p2p = final_result.project_one(&p3p);
+    //                 let dx = p2p.x - feature.p2d.x as f64;
+    //                 let dy = p2p.y - feature.p2d.y as f64;
+    //                 ((dx * dx + dy * dy).sqrt(), (feature.p2d.x, feature.p2d.y))
+    //             })
+    //             .unzip();
+    //         if let Some(recording) = recording_option {
+    //             let p3p_rerun: Vec<_> = f
+    //                 .features
+    //                 .values()
+    //                 .map(|feature| {
+    //                     let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
+    //                     let p3p = transform.cast() * p3;
+    //                     (p3p.x, p3p.y, p3p.z)
+    //                 })
+    //                 .collect();
+    //             recording.set_time_nanos("stable", f.time_ns);
+    //             recording
+    //                 .log("/board", &rerun::Points3D::new(p3p_rerun))
+    //                 .unwrap();
+    //             recording
+    //                 .log("/camera_coordinate", &rerun::Transform3D::IDENTITY)
+    //                 .unwrap();
+    //             let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
+    //             recording
+    //                 .log(
+    //                     "/board/reprojection_err",
+    //                     &rerun::TextLog::new(format!("{} px", avg_err)),
+    //                 )
+    //                 .unwrap();
+    //         };
+    //         (f.time_ns, reprojection, p2ds)
+    //     })
+    //     .collect();
     let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
         .iter()
         .flat_map(|f| f.1.clone())
@@ -531,6 +583,7 @@ pub fn validation(
         .sum::<f64>();
     println!("Avg reprojection error of 99%: {} px", avg_99_percent);
     if let Some(recording) = recording_option {
+        let topic = format!("/cam{}/detected", cam_idx);
         let color_gradient = colorous::ORANGE_RED;
         let min_v = 0.2;
         for (time_ns, reps, p2ds) in &time_reprojection_errors_p2ds {
@@ -544,10 +597,9 @@ pub fn validation(
                 })
                 .unzip();
             recording.set_time_nanos("stable", *time_ns);
-
             recording
                 .log(
-                    "/detected",
+                    topic.to_string(),
                     &rerun::Points2D::new(rerun_shift(p2ds))
                         .with_colors(colors)
                         .with_radii([rerun::Radius::new_ui_points(1.0)])
