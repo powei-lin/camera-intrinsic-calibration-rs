@@ -1,6 +1,7 @@
 pub mod board;
 pub mod data_loader;
 pub mod detected_points;
+pub mod io;
 pub mod optimization;
 pub mod types;
 pub mod util;

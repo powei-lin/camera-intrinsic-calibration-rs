@@ -11,6 +11,7 @@ use super::types::{DVecVec3, Vec3DVec};
 use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
+use rerun::RecordingStream;
 use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
 
@@ -473,11 +474,7 @@ pub fn na_isometry3_to_rerun_transform3d(transform: &na::Isometry3<f64>) -> reru
     rerun::Transform3D::from_translation_rotation(t, rerun::Quaternion::from_xyzw(q_xyzw.into()))
 }
 
-pub fn init_camera_extrinsic(
-    cam_rtvecs: &[HashMap<usize, RvecTvec>],
-    recording: &rerun::RecordingStream,
-    times: &[HashMap<usize, i64>],
-) -> Vec<RvecTvec> {
+pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
     (0..cam_rtvecs.len())
         .map(|cam_i| {
             if cam_i == 0 {
@@ -494,30 +491,12 @@ pub fn init_camera_extrinsic(
                 .map(|k| {
                     let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
                     let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
-                    let t0 = times[0].get(k).unwrap();
-                    let t1 = times[cam_i].get(k).unwrap();
-                    recording.set_time_nanos("stable", *t0);
-                    recording
-                        .log(
-                            format!("/k0"),
-                            &na_isometry3_to_rerun_transform3d(&t_0_b.inverse()),
-                        )
-                        .unwrap();
-                    // recording.set_time_nanos("stable", *t1);
-                    recording
-                        .log(
-                            format!("/k1"),
-                            &na_isometry3_to_rerun_transform3d(&t_i_b.inverse()),
-                        )
-                        .unwrap();
                     (t_0_b, t_i_b)
                 })
                 .collect();
             let mut problem = tiny_solver::Problem::new();
             let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
             for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
-                let td = t_i_b.inverse() * t_i_0_init * t_0_b;
-                // print!("td {}", td);
                 let cost = SE3Factor::new(t_0_b, t_i_b);
                 problem.add_residual_block(
                     6,
@@ -746,15 +725,15 @@ pub fn validation(
                     .collect();
                 recording.set_time_nanos("stable", f.time_ns);
                 recording
-                    .log("/board", &rerun::Points3D::new(p3p_rerun))
-                    .unwrap();
-                recording
-                    .log("/camera_coordinate", &rerun::Transform3D::IDENTITY)
+                    .log(
+                        format!("/cam{}/board", cam_idx),
+                        &rerun::Points3D::new(p3p_rerun),
+                    )
                     .unwrap();
                 let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
                 recording
                     .log(
-                        "/board/reprojection_err",
+                        format!("/cam{}/board/reprojection_err", cam_idx),
                         &rerun::TextLog::new(format!("{} px", avg_err)),
                     )
                     .unwrap();
@@ -781,7 +760,7 @@ pub fn validation(
         .sum::<f64>();
     println!("Avg reprojection error of 99%: {} px", avg_99_percent);
     if let Some(recording) = recording_option {
-        let topic = format!("/cam{}/detected", cam_idx);
+        let topic = format!("/cam{}/rep_err", cam_idx);
         let color_gradient = colorous::ORANGE_RED;
         let min_v = 0.2;
         for (time_ns, reps, p2ds) in &time_reprojection_errors_p2ds {
@@ -807,4 +786,71 @@ pub fn validation(
         }
     }
     (avg_99_percent, median_reprojection_error)
+}
+
+pub fn init_and_calibrate_one_camera(
+    cam_idx: usize,
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    target_model: &GenericModel<f64>,
+    recording: &RecordingStream,
+    fixed_focal: Option<f64>,
+    disabled_distortion_num: usize,
+    one_focal: bool,
+) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
+    let (frame0, frame1) = find_best_two_frames(&cams_detected_feature_frames[cam_idx]);
+
+    let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0]
+        .clone()
+        .unwrap();
+    let frame_feature1 = &cams_detected_feature_frames[cam_idx][frame1]
+        .clone()
+        .unwrap();
+
+    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
+    key_frames.iter().enumerate().for_each(|(i, k)| {
+        let topic = format!("/cam{}/keyframe{}", cam_idx, i);
+        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
+        recording
+            .log(topic, &rerun::TextLog::new("keyframe"))
+            .unwrap();
+    });
+
+    let mut initial_camera = GenericModel::UCM(UCM::zeros());
+    for i in 0..10 {
+        log::trace!("Initialize ucm {}", i);
+        if let Some(initialized_ucm) = try_init_camera(frame_feature0, frame_feature1, fixed_focal)
+        {
+            initial_camera = initialized_ucm;
+            break;
+        }
+    }
+    if initial_camera.params()[0] == 0.0 {
+        println!("calibration failed.");
+        return None;
+    }
+    let mut final_model = *target_model;
+    final_model.set_w_h(
+        initial_camera.width().round() as u32,
+        initial_camera.height().round() as u32,
+    );
+    convert_model(&initial_camera, &mut final_model, disabled_distortion_num);
+    println!("Converted {:?}", final_model);
+    let (one_focal, fixed_focal) = if let Some(focal) = fixed_focal {
+        // if fixed focal then set one focal true
+        let mut p = final_model.params();
+        p[0] = focal;
+        p[1] = focal;
+        final_model.set_params(&p);
+        (true, true)
+    } else {
+        (one_focal, false)
+    };
+
+    calib_camera(
+        &cams_detected_feature_frames[cam_idx],
+        &final_model,
+        one_focal,
+        disabled_distortion_num,
+        fixed_focal,
+    )
 }

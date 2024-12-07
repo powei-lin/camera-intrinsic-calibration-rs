@@ -6,7 +6,8 @@ use camera_intrinsic_calibration::board::{
 };
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::detected_points::FrameFeature;
-use camera_intrinsic_calibration::types::{extrinsics_to_json, Extrinsics, RvecTvec, ToRvecTvec};
+use camera_intrinsic_calibration::io::{extrinsics_to_json, write_report};
+use camera_intrinsic_calibration::types::{Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
@@ -68,72 +69,6 @@ struct CCRSCli {
     fixed_focal: Option<f64>,
 }
 
-fn init_and_calibrate_one_camera(
-    cam_idx: usize,
-    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
-    target_model: &GenericModel<f64>,
-    recording: &RecordingStream,
-    fixed_focal: Option<f64>,
-    disabled_distortion_num: usize,
-    one_focal: bool,
-) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
-    let (frame0, frame1) = find_best_two_frames(&cams_detected_feature_frames[cam_idx]);
-
-    let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0]
-        .clone()
-        .unwrap();
-    let frame_feature1 = &cams_detected_feature_frames[cam_idx][frame1]
-        .clone()
-        .unwrap();
-
-    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
-    key_frames.iter().enumerate().for_each(|(i, k)| {
-        let topic = format!("/cam{}/keyframe{}", cam_idx, i);
-        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
-        recording
-            .log(topic, &rerun::TextLog::new("keyframe"))
-            .unwrap();
-    });
-
-    let mut initial_camera = GenericModel::UCM(UCM::zeros());
-    for i in 0..10 {
-        trace!("Initialize ucm {}", i);
-        if let Some(initialized_ucm) = try_init_camera(frame_feature0, frame_feature1, fixed_focal)
-        {
-            initial_camera = initialized_ucm;
-            break;
-        }
-    }
-    if initial_camera.params()[0] == 0.0 {
-        println!("calibration failed.");
-        return None;
-    }
-    let mut final_model = *target_model;
-    final_model.set_w_h(
-        initial_camera.width().round() as u32,
-        initial_camera.height().round() as u32,
-    );
-    convert_model(&initial_camera, &mut final_model, disabled_distortion_num);
-    println!("Converted {:?}", final_model);
-    let (one_focal, fixed_focal) = if let Some(focal) = fixed_focal {
-        // if fixed focal then set one focal true
-        let mut p = final_model.params();
-        p[0] = focal;
-        p[1] = focal;
-        final_model.set_params(&p);
-        (true, true)
-    } else {
-        (one_focal, false)
-    };
-
-    calib_camera(
-        &cams_detected_feature_frames[cam_idx],
-        &final_model,
-        one_focal,
-        disabled_distortion_num,
-        fixed_focal,
-    )
-}
 
 fn main() {
     env_logger::init();
@@ -211,9 +146,9 @@ fn main() {
             let topic = format!("/cam{}", cam_idx);
             log_feature_frames(&recording, &topic, feature_frames);
             let mut calibrated_result: Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> = None;
-            let max_trail = 3;
+            let max_trials = 3;
             let cam0_fixed_focal = if cam_idx == 0 { cli.fixed_focal } else { None };
-            for _ in 0..max_trail {
+            for _ in 0..max_trials {
                 calibrated_result = init_and_calibrate_one_camera(
                     cam_idx,
                     &cams_detected_feature_frames,
@@ -230,29 +165,14 @@ fn main() {
             if calibrated_result.is_none() {
                 panic!(
                     "Failed to calibrate cam{} after {} times",
-                    cam_idx, max_trail
+                    cam_idx, max_trials
                 );
             }
             let (final_result, rtvec_map) = calibrated_result.unwrap();
             (final_result, rtvec_map)
         })
         .unzip();
-    let times: Vec<HashMap<usize, i64>> = cams_detected_feature_frames
-        .iter()
-        .map(|f| {
-            f.iter()
-                .enumerate()
-                .filter_map(|f| {
-                    if f.1.is_none() {
-                        None
-                    } else {
-                        Some((f.0, f.1.clone().unwrap().time_ns))
-                    }
-                })
-                .collect()
-        })
-        .collect();
-    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs, &recording, &times);
+    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs);
     for t in &t_cam_i_0_init {
         println!("r {} t {}", t.na_rvec(), t.na_tvec());
     }
@@ -261,10 +181,11 @@ fn main() {
         &t_cam_i_0_init,
         &cam_rtvecs,
         &cams_detected_feature_frames,
-        cli.one_focal,
+        cli.one_focal || cli.fixed_focal.is_some(),
         cli.disabled_distortion_num,
         cli.fixed_focal.is_some(),
     ) {
+        let mut rep_rms = Vec::new();
         for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
             model_to_json(
                 &format!("{}/cam{}.json", output_folder, cam_idx),
@@ -279,34 +200,45 @@ fn main() {
                     )
                 })
                 .collect();
-            let (avg_reprojection, median_reprojection) = validation(
+            recording
+                .log_static(
+                    format!("/cam{}", cam_idx),
+                    &na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse()),
+                )
+                .unwrap();
+            let rep = validation(
                 cam_idx,
                 intrinsic,
                 &new_rtvec_map,
                 &cams_detected_feature_frames[cam_idx],
                 Some(&recording),
             );
+            rep_rms.push(rep);
             println!(
                 "Cam {} final params with extrinsic{}",
                 cam_idx,
                 serde_json::to_string_pretty(intrinsic).unwrap()
             );
         }
+        write_report(&format!("{}/report.txt", output_folder), true, &rep_rms);
+
         extrinsics_to_json(
             &format!("{}/extrinsics.json", output_folder),
             &Extrinsics::new(&t_i_0),
         );
     } else {
+        let mut rep_rms = Vec::new();
         for (cam_idx, (intrinsic, rtvec_map)) in
             calibrated_intrinsics.iter().zip(cam_rtvecs).enumerate()
         {
-            validation(
+            let rep = validation(
                 cam_idx,
                 intrinsic,
                 &rtvec_map,
                 &cams_detected_feature_frames[cam_idx],
                 Some(&recording),
             );
+            rep_rms.push(rep);
             println!(
                 "Cam {} final params{}",
                 cam_idx,
@@ -317,5 +249,6 @@ fn main() {
                 &intrinsic,
             );
         }
+        write_report(&format!("{}/report.txt", output_folder), false, &rep_rms);
     }
 }

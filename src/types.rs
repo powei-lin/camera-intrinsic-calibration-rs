@@ -40,12 +40,6 @@ impl Extrinsics {
     }
 }
 
-pub fn extrinsics_to_json(output_path: &str, extrinsic: &Extrinsics) {
-    let j = serde_json::to_string_pretty(extrinsic).unwrap();
-    let mut file = std::fs::File::create(output_path).unwrap();
-    file.write_all(j.as_bytes()).unwrap();
-}
-
 pub trait ToRvecTvec {
     fn to_rvec_tvec(&self) -> RvecTvec;
 }
