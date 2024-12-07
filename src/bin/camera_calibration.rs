@@ -5,11 +5,15 @@ use camera_intrinsic_calibration::board::{
     board_config_from_json, board_config_to_json, BoardConfig,
 };
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
+use camera_intrinsic_calibration::detected_points::FrameFeature;
+use camera_intrinsic_calibration::io::{extrinsics_to_json, write_report};
+use camera_intrinsic_calibration::types::{Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
+use std::collections::HashMap;
 use std::time::Instant;
 use time::OffsetDateTime;
 
@@ -102,7 +106,8 @@ fn main() {
         .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
-    let mut cams_detected_feature_frames = match cli.dataset_format {
+    let mut cams_detected_feature_frames: Vec<Vec<Option<FrameFeature>>> = match cli.dataset_format
+    {
         DatasetFormat::Euroc => load_euroc(
             dataset_root,
             &detector,
@@ -125,81 +130,117 @@ fn main() {
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
     println!("total: {} images", cams_detected_feature_frames[0].len());
-    cams_detected_feature_frames[0].truncate(cli.max_images);
+    cams_detected_feature_frames
+        .iter_mut()
+        .for_each(|f| f.truncate(cli.max_images));
     println!(
         "avg: {} sec",
         duration_sec / cams_detected_feature_frames[0].len() as f64
     );
-    for (cam_idx, feature_frames) in cams_detected_feature_frames.iter().enumerate() {
-        let topic = format!("/cam{}", cam_idx);
-        log_feature_frames(&recording, &topic, feature_frames);
+    let (calibrated_intrinsics, cam_rtvecs): (Vec<_>, Vec<_>) = cams_detected_feature_frames
+        .iter()
+        .enumerate()
+        .map(|(cam_idx, feature_frames)| {
+            let topic = format!("/cam{}", cam_idx);
+            log_feature_frames(&recording, &topic, feature_frames);
+            let mut calibrated_result: Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> = None;
+            let max_trials = 3;
+            let cam0_fixed_focal = if cam_idx == 0 { cli.fixed_focal } else { None };
+            for _ in 0..max_trials {
+                calibrated_result = init_and_calibrate_one_camera(
+                    cam_idx,
+                    &cams_detected_feature_frames,
+                    &cli.model,
+                    &recording,
+                    cam0_fixed_focal,
+                    cli.disabled_distortion_num,
+                    cli.one_focal,
+                );
+                if calibrated_result.is_some() {
+                    break;
+                }
+            }
+            if calibrated_result.is_none() {
+                panic!(
+                    "Failed to calibrate cam{} after {} times",
+                    cam_idx, max_trials
+                );
+            }
+            let (final_result, rtvec_map) = calibrated_result.unwrap();
+            (final_result, rtvec_map)
+        })
+        .unzip();
+    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs);
+    for t in &t_cam_i_0_init {
+        println!("r {} t {}", t.na_rvec(), t.na_tvec());
     }
-    let (frame0, frame1) = find_best_two_frames(&cams_detected_feature_frames[0]);
-
-    let frame_feature0 = &cams_detected_feature_frames[0][frame0].clone().unwrap();
-    let frame_feature1 = &cams_detected_feature_frames[0][frame1].clone().unwrap();
-
-    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
-    key_frames.iter().enumerate().for_each(|(i, k)| {
-        let topic = format!("/cam0/keyframe{}", i);
-        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
-        recording
-            .log(topic, &rerun::TextLog::new("keyframe"))
-            .unwrap();
-    });
-
-    let mut initial_camera = GenericModel::UCM(UCM::zeros());
-    for i in 0..10 {
-        trace!("Initialize ucm {}", i);
-        if let Some(initialized_ucm) =
-            try_init_camera(frame_feature0, frame_feature1, cli.fixed_focal)
-        {
-            initial_camera = initialized_ucm;
-            break;
+    if let Some((camera_intrinsics, t_i_0, board_rtvecs)) = calib_all_camera_with_extrinsics(
+        &calibrated_intrinsics,
+        &t_cam_i_0_init,
+        &cam_rtvecs,
+        &cams_detected_feature_frames,
+        cli.one_focal || cli.fixed_focal.is_some(),
+        cli.disabled_distortion_num,
+        cli.fixed_focal.is_some(),
+    ) {
+        let mut rep_rms = Vec::new();
+        for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
+            model_to_json(&format!("{}/cam{}.json", output_folder, cam_idx), intrinsic);
+            let new_rtvec_map: HashMap<usize, RvecTvec> = board_rtvecs
+                .iter()
+                .map(|(k, t_0_b)| {
+                    (
+                        *k,
+                        (t_i_0[cam_idx].to_na_isometry3() * t_0_b.to_na_isometry3()).to_rvec_tvec(),
+                    )
+                })
+                .collect();
+            recording
+                .log_static(
+                    format!("/cam{}", cam_idx),
+                    &na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse()),
+                )
+                .unwrap();
+            let rep = validation(
+                cam_idx,
+                intrinsic,
+                &new_rtvec_map,
+                &cams_detected_feature_frames[cam_idx],
+                Some(&recording),
+            );
+            rep_rms.push(rep);
+            println!(
+                "Cam {} final params with extrinsic{}",
+                cam_idx,
+                serde_json::to_string_pretty(intrinsic).unwrap()
+            );
         }
-    }
-    if initial_camera.params()[0] == 0.0 {
-        println!("calibration failed.");
-        return;
-    }
-    let mut final_model = cli.model;
-    final_model.set_w_h(
-        initial_camera.width().round() as u32,
-        initial_camera.height().round() as u32,
-    );
-    convert_model(
-        &initial_camera,
-        &mut final_model,
-        cli.disabled_distortion_num,
-    );
-    println!("Converted {:?}", final_model);
-    let (one_focal, fixed_focal) = if let Some(focal) = cli.fixed_focal {
-        // if fixed focal then set one focal true
-        let mut p = final_model.params();
-        p[0] = focal;
-        p[1] = focal;
-        final_model.set_params(&p);
-        (true, true)
-    } else {
-        (cli.one_focal, false)
-    };
+        write_report(&format!("{}/report.txt", output_folder), true, &rep_rms);
 
-    let (final_result, rtvec_list) = calib_camera(
-        &cams_detected_feature_frames[0],
-        &final_model,
-        one_focal,
-        cli.disabled_distortion_num,
-        fixed_focal,
-    );
-    validation(
-        &final_result,
-        &rtvec_list,
-        &cams_detected_feature_frames[0],
-        Some(&recording),
-    );
-    println!(
-        "Final params{}",
-        serde_json::to_string_pretty(&final_result).unwrap()
-    );
-    model_to_json(&format!("{}/result.json", output_folder), &final_result);
+        extrinsics_to_json(
+            &format!("{}/extrinsics.json", output_folder),
+            &Extrinsics::new(&t_i_0),
+        );
+    } else {
+        let mut rep_rms = Vec::new();
+        for (cam_idx, (intrinsic, rtvec_map)) in
+            calibrated_intrinsics.iter().zip(cam_rtvecs).enumerate()
+        {
+            let rep = validation(
+                cam_idx,
+                intrinsic,
+                &rtvec_map,
+                &cams_detected_feature_frames[cam_idx],
+                Some(&recording),
+            );
+            rep_rms.push(rep);
+            println!(
+                "Cam {} final params{}",
+                cam_idx,
+                serde_json::to_string_pretty(intrinsic).unwrap()
+            );
+            model_to_json(&format!("{}/cam{}.json", output_folder, cam_idx), intrinsic);
+        }
+        write_report(&format!("{}/report.txt", output_folder), false, &rep_rms);
+    }
 }

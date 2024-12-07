@@ -1,3 +1,5 @@
+use crate::types::DVecVec3;
+
 use camera_intrinsic_model::*;
 use nalgebra as na;
 use num_dual::DualDVec64;
@@ -101,16 +103,8 @@ impl Factor for UCMInitFocalAlphaFactor {
         cam_params[1] = params[0][0].clone();
         cam_params[4] = params[0][1].clone();
         let model = self.target.new_from_params(&cam_params);
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
+        let rvec = params[1].to_vec3();
+        let tvec = params[2].to_vec3();
         let transform = na::Isometry3::new(tvec, rvec);
         let p3d_t = transform * self.p3d.clone();
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
@@ -159,16 +153,8 @@ impl Factor for ReprojectionFactor {
             params0 = params0.clone().insert_row(1, params0[0].clone());
         }
         let model = self.target.new_from_params(&params0);
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
+        let rvec = params[1].to_vec3();
+        let tvec = params[2].to_vec3();
         let transform = na::Isometry3::new(tvec, rvec);
         let p3d_t = transform * self.p3d.clone();
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
@@ -177,6 +163,102 @@ impl Factor for ReprojectionFactor {
         na::dvector![
             p2d_p[0].clone() - self.p2d[0].clone(),
             p2d_p[1].clone() - self.p2d[1].clone()
+        ]
+    }
+}
+
+pub struct OtherCamReprojectionFactor {
+    pub target: GenericModel<DualDVec64>,
+    pub p3d: na::Point3<DualDVec64>,
+    pub p2d: na::Vector2<DualDVec64>,
+    pub xy_same_focal: bool,
+}
+
+impl OtherCamReprojectionFactor {
+    pub fn new(
+        target: &GenericModel<f64>,
+        p3d: &glam::Vec3,
+        p2d: &glam::Vec2,
+        xy_same_focal: bool,
+    ) -> OtherCamReprojectionFactor {
+        let target = target.cast();
+        let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
+        let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
+        OtherCamReprojectionFactor {
+            target,
+            p3d,
+            p2d,
+            xy_same_focal,
+        }
+    }
+}
+impl Factor for OtherCamReprojectionFactor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        // params[params, rvec, tvec]
+        let mut params0 = params[0].clone();
+        if self.xy_same_focal {
+            params0 = params0.clone().insert_row(1, params0[0].clone());
+        }
+        let model = self.target.new_from_params(&params0);
+        let rvec0 = params[1].to_vec3();
+        let tvec0 = params[2].to_vec3();
+        let t_0_b = na::Isometry3::new(tvec0, rvec0);
+        let rvec1 = params[3].to_vec3();
+        let tvec1 = params[4].to_vec3();
+        let t_i_0 = na::Isometry3::new(tvec1, rvec1);
+        let p3d_t = t_i_0 * t_0_b * self.p3d.clone();
+        let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
+        let p2d_p = model.project_one(&p3d_t);
+
+        na::dvector![
+            p2d_p[0].clone() - self.p2d[0].clone(),
+            p2d_p[1].clone() - self.p2d[1].clone()
+        ]
+    }
+}
+
+pub struct SE3Factor {
+    pub t_0_b: na::Isometry3<DualDVec64>,
+    pub t_i_b: na::Isometry3<DualDVec64>,
+}
+
+impl SE3Factor {
+    pub fn new(t_0_b: &na::Isometry3<f64>, t_i_b: &na::Isometry3<f64>) -> SE3Factor {
+        SE3Factor {
+            t_0_b: t_0_b.cast(),
+            t_i_b: t_i_b.cast(),
+        }
+    }
+}
+
+impl Factor for SE3Factor {
+    fn residual_func(
+        &self,
+        params: &[nalgebra::DVector<num_dual::DualDVec64>],
+    ) -> nalgebra::DVector<num_dual::DualDVec64> {
+        let rvec = na::Vector3::new(
+            params[0][0].clone(),
+            params[0][1].clone(),
+            params[0][2].clone(),
+        );
+        let tvec = na::Vector3::new(
+            params[1][0].clone(),
+            params[1][1].clone(),
+            params[1][2].clone(),
+        );
+        let t_i_0 = na::Isometry3::new(tvec, rvec);
+        let t_diff = self.t_i_b.inverse() * t_i_0 * self.t_0_b.clone();
+        let r_diff = t_diff.rotation.scaled_axis();
+        na::dvector![
+            r_diff[0].clone(),
+            r_diff[1].clone(),
+            r_diff[2].clone(),
+            t_diff.translation.x.clone(),
+            t_diff.translation.y.clone(),
+            t_diff.translation.z.clone(),
         ]
     }
 }

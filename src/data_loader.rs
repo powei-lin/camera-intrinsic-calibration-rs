@@ -10,6 +10,8 @@ use glob::glob;
 use image::{DynamicImage, ImageReader};
 use rayon::prelude::*;
 
+const MIN_CORNERS: usize = 24;
+
 fn path_to_timestamp(path: &Path) -> i64 {
     let time_ns: i64 = path
         .file_stem()
@@ -66,13 +68,13 @@ pub fn load_euroc(
     cam_num: usize,
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<Vec<Option<FrameFeature>>> {
-    const MIN_CORNERS: usize = 24;
     (0..cam_num)
         .map(|cam_idx| {
+            log::trace!("loading cam{}", cam_idx);
             let img_paths =
                 glob(format!("{}/mav0/cam{}/data/*.png", root_folder, cam_idx).as_str())
                     .expect("failed");
-            img_paths
+            let mut time_frame: Vec<_> = img_paths
                 .skip(start_idx)
                 .step_by(step)
                 .par_bridge()
@@ -85,9 +87,20 @@ pub fn load_euroc(
                         let topic = format!("/cam{}", cam_idx);
                         log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
                     };
-                    image_to_option_feature_frame(tag_detector, &img, board, MIN_CORNERS, time_ns)
+                    (
+                        time_ns,
+                        image_to_option_feature_frame(
+                            tag_detector,
+                            &img,
+                            board,
+                            MIN_CORNERS,
+                            time_ns,
+                        ),
+                    )
                 })
-                .collect()
+                .collect();
+            time_frame.sort_by(|a, b| a.0.cmp(&b.0));
+            time_frame.iter().map(|f| f.1.clone()).collect()
         })
         .collect()
 }
@@ -101,12 +114,12 @@ pub fn load_others(
     cam_num: usize,
     recording_option: Option<&rerun::RecordingStream>,
 ) -> Vec<Vec<Option<FrameFeature>>> {
-    const MIN_CORNERS: usize = 24;
     (0..cam_num)
         .map(|cam_idx| {
             let img_paths = glob(format!("{}/**/cam{}/**/*.png", root_folder, cam_idx).as_str())
                 .expect("failed");
-            img_paths
+            log::trace!("loading cam{}", cam_idx);
+            let mut time_frame: Vec<_> = img_paths
                 .skip(start_idx)
                 .step_by(step)
                 .enumerate()
@@ -120,9 +133,20 @@ pub fn load_others(
                         let topic = format!("/cam{}", cam_idx);
                         log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
                     };
-                    image_to_option_feature_frame(tag_detector, &img, board, MIN_CORNERS, time_ns)
+                    (
+                        time_ns,
+                        image_to_option_feature_frame(
+                            tag_detector,
+                            &img,
+                            board,
+                            MIN_CORNERS,
+                            time_ns,
+                        ),
+                    )
                 })
-                .collect()
+                .collect();
+            time_frame.sort_by(|a, b| a.0.cmp(&b.0));
+            time_frame.iter().map(|f| f.1.clone()).collect()
         })
         .collect()
 }

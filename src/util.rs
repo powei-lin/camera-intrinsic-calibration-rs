@@ -1,15 +1,17 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
-use crate::types::RvecTvec;
+use crate::types::{Intrinsics, RvecTvec, ToRvecTvec};
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
+use super::types::Vec3DVec;
 use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
+use rerun::RecordingStream;
 use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
 
@@ -23,15 +25,16 @@ pub fn rtvec_to_na_dvec(
 }
 
 fn set_problem_parameter_bound(
+    params_name: &str,
     problem: &mut tiny_solver::Problem,
     generic_camera: &GenericModel<f64>,
     xy_same_focal: bool,
 ) {
     let shift = if xy_same_focal { 1 } else { 0 };
-    problem.set_variable_bounds("params", 0, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 1 - shift, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 2 - shift, 0.0, generic_camera.width());
-    problem.set_variable_bounds("params", 3 - shift, 0.0, generic_camera.height());
+    problem.set_variable_bounds(params_name, 0, 0.0, 10000.0);
+    problem.set_variable_bounds(params_name, 1 - shift, 0.0, 10000.0);
+    problem.set_variable_bounds(params_name, 2 - shift, 0.0, generic_camera.width());
+    problem.set_variable_bounds(params_name, 3 - shift, 0.0, generic_camera.height());
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
         log::trace!(
             "set params bound {} {} {}",
@@ -39,10 +42,11 @@ fn set_problem_parameter_bound(
             lower,
             upper
         );
-        problem.set_variable_bounds("params", distortion_idx - shift, lower, upper);
+        problem.set_variable_bounds(params_name, distortion_idx - shift, lower, upper);
     }
 }
 fn set_problem_parameter_disabled(
+    params_name: &str,
     problem: &mut tiny_solver::Problem,
     init_values: &mut HashMap<String, na::DVector<f64>>,
     generic_camera: &GenericModel<f64>,
@@ -52,8 +56,8 @@ fn set_problem_parameter_disabled(
     let shift = if xy_same_focal { 1 } else { 0 };
     for i in 0..disabled_distortions {
         let distortion_idx = generic_camera.params().len() - 1 - shift - i;
-        problem.fix_variable("params", distortion_idx);
-        let params = init_values.get_mut("params").unwrap();
+        problem.fix_variable(params_name, distortion_idx);
+        let params = init_values.get_mut(params_name).unwrap();
         log::trace!(
             "shift {} distortion {} {:?}",
             shift,
@@ -110,8 +114,8 @@ pub fn try_init_camera(
     // poses
     let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
     let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
-    let rtvec0 = RvecTvec::new(rvec0, tvec0);
-    let rtvec1 = RvecTvec::new(rvec1, tvec1);
+    let rtvec0 = RvecTvec::new(&rvec0, &tvec0);
+    let rtvec1 = RvecTvec::new(&rvec1, &tvec1);
 
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
@@ -231,8 +235,9 @@ pub fn convert_model(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     // distortion parameter bound
-    set_problem_parameter_bound(&mut problem, target_model, false);
+    set_problem_parameter_bound("params", &mut problem, target_model, false);
     set_problem_parameter_disabled(
+        "params",
         &mut problem,
         &mut initial_values,
         target_model,
@@ -298,10 +303,10 @@ pub fn init_ucm(
 
     let initial_values = HashMap::<String, na::DVector<f64>>::from([
         ("params".to_string(), init_f_alpha),
-        ("rvec0".to_string(), rtvec0.rvec.clone()),
-        ("tvec0".to_string(), rtvec0.tvec.clone()),
-        ("rvec1".to_string(), rtvec1.rvec.clone()),
-        ("tvec1".to_string(), rtvec1.tvec.clone()),
+        ("rvec0".to_string(), rtvec0.na_rvec()),
+        ("tvec0".to_string(), rtvec0.na_tvec()),
+        ("rvec1".to_string(), rtvec1.na_rvec()),
+        ("tvec1".to_string(), rtvec1.na_tvec()),
     ]);
 
     // initialize optimizer
@@ -340,6 +345,7 @@ pub fn init_ucm(
                 0,
                 fixed_focal,
             )
+            .unwrap()
             .0,
         )
     } else {
@@ -353,7 +359,7 @@ pub fn calib_camera(
     xy_same_focal: bool,
     disabled_distortions: usize,
     fixed_focal: bool,
-) -> (GenericModel<f64>, Vec<RvecTvec>) {
+) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
     let mut params = generic_camera.params();
     if xy_same_focal {
         // remove fy
@@ -395,10 +401,6 @@ pub fn calib_camera(
                         .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
                 })
                 .unzip();
-            // if p3ds.len() < 6 {
-            //     println!("skip frame {}", i);
-            //     continue;
-            // }
             valid_indexes.push(i);
             let (rvec, tvec) =
                 rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
@@ -411,15 +413,19 @@ pub fn calib_camera(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
     // let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
-    set_problem_parameter_bound(&mut problem, generic_camera, xy_same_focal);
+    set_problem_parameter_bound("params", &mut problem, generic_camera, xy_same_focal);
     set_problem_parameter_disabled(
+        "params",
         &mut problem,
         &mut initial_values,
         generic_camera,
         xy_same_focal,
         disabled_distortions,
     );
-    let mut result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+    let result_option = optimizer.optimize(&problem, &initial_values, None);
+    // check is some
+    result_option.as_ref()?;
+    let mut result = result_option.unwrap();
     if fixed_focal {
         println!("set focal and opt again.");
         problem.fix_variable("params", 0);
@@ -435,43 +441,259 @@ pub fn calib_camera(
     println!("params {}", new_params);
     let mut calibrated_camera = *generic_camera;
     calibrated_camera.set_params(&new_params);
-    let rtvec_vec: Vec<_> = valid_indexes
+    let rtvec_vec: HashMap<usize, RvecTvec> = valid_indexes
         .iter()
         .map(|&i| {
             let rvec_name = format!("rvec{}", i);
             let tvec_name = format!("tvec{}", i);
 
-            RvecTvec {
-                rvec: result.remove(&rvec_name).unwrap(),
-                tvec: result.remove(&tvec_name).unwrap(),
-            }
+            (
+                i,
+                RvecTvec::new(
+                    &result.remove(&rvec_name).unwrap(),
+                    &result.remove(&tvec_name).unwrap(),
+                ),
+            )
         })
         .collect();
-    (calibrated_camera, rtvec_vec)
+    Some((calibrated_camera, rtvec_vec))
+}
+
+pub fn na_isometry3_to_rerun_transform3d(transform: &na::Isometry3<f64>) -> rerun::Transform3D {
+    let t = (
+        transform.translation.x as f32,
+        transform.translation.y as f32,
+        transform.translation.z as f32,
+    );
+    let q_xyzw = (
+        transform.rotation.quaternion().i as f32,
+        transform.rotation.quaternion().j as f32,
+        transform.rotation.quaternion().k as f32,
+        transform.rotation.quaternion().w as f32,
+    );
+    rerun::Transform3D::from_translation_rotation(t, rerun::Quaternion::from_xyzw(q_xyzw.into()))
+}
+
+pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
+    (0..cam_rtvecs.len())
+        .map(|cam_i| {
+            if cam_i == 0 {
+                return RvecTvec::new(
+                    &na::Vector3::zeros().to_dvec(),
+                    &na::Vector3::zeros().to_dvec(),
+                );
+            }
+            let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
+            let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
+            let key_intersection: Vec<_> = cam_0_keys.intersection(&cam_i_keys).collect();
+            let t_0_b_and_t_i_b: Vec<_> = key_intersection
+                .into_iter()
+                .map(|k| {
+                    let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
+                    let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
+                    (t_0_b, t_i_b)
+                })
+                .collect();
+            let mut problem = tiny_solver::Problem::new();
+            let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
+            for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
+                let cost = SE3Factor::new(t_0_b, t_i_b);
+                problem.add_residual_block(
+                    6,
+                    vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
+                    Box::new(cost),
+                    Some(Box::new(HuberLoss::new(0.5))),
+                );
+            }
+            let rvec = t_i_0_init.rotation.scaled_axis().to_dvec();
+            let tvec = na::dvector![
+                t_i_0_init.translation.x,
+                t_i_0_init.translation.y,
+                t_i_0_init.translation.z,
+            ];
+            let initial_values = HashMap::<String, na::DVector<f64>>::from([
+                ("rvec".to_string(), rvec),
+                ("tvec".to_string(), tvec),
+            ]);
+
+            let optimizer = tiny_solver::GaussNewtonOptimizer {};
+            let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+            println!("extrinsic cam{} cam0", cam_i);
+            println!("rvec: {}", result["rvec"]);
+            println!("tvec: {}", result["tvec"]);
+            RvecTvec::new(result.get("rvec").unwrap(), result.get("tvec").unwrap())
+        })
+        .collect()
+}
+
+pub fn calib_all_camera_with_extrinsics(
+    cameras: &[GenericModel<f64>],
+    t_cam_i_0: &[RvecTvec],
+    cam_rtvecs: &[HashMap<usize, RvecTvec>],
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    xy_same_focal: bool,
+    disabled_distortions: usize,
+    cam0_fixed_focal: bool,
+) -> Option<(Intrinsics, Vec<RvecTvec>, HashMap<usize, RvecTvec>)> {
+    let mut problem = tiny_solver::Problem::new();
+    let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
+    let mut valid_frame_board_to_cam0 = HashSet::new();
+    for (cam_idx, generic_camera) in cameras.iter().enumerate() {
+        let params_name = format!("params{}", cam_idx);
+        let mut params = generic_camera.params();
+        if xy_same_focal {
+            // remove fy
+            params = params.remove_row(1);
+        };
+        let params_len = params.len();
+        initial_values.insert(params_name.clone(), params);
+
+        let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
+        let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
+        if cam_idx > 0 {
+            initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].na_rvec());
+            initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].na_tvec());
+        }
+
+        for (&valid_frame_idx, rtvec) in &cam_rtvecs[cam_idx] {
+            let frame_feature = cams_detected_feature_frames[cam_idx][valid_frame_idx]
+                .clone()
+                .unwrap();
+            let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
+            let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
+            valid_frame_board_to_cam0.insert(valid_frame_idx);
+            for fp in frame_feature.features.values() {
+                if cam_idx == 0 {
+                    let cost =
+                        ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
+                    problem.add_residual_block(
+                        2,
+                        vec![
+                            (params_name.clone(), params_len),
+                            (rvec_0_b_name.clone(), 3),
+                            (tvec_0_b_name.clone(), 3),
+                        ],
+                        Box::new(cost),
+                        Some(Box::new(HuberLoss::new(1.0))),
+                    );
+                } else {
+                    let cost = OtherCamReprojectionFactor::new(
+                        generic_camera,
+                        &fp.p3d,
+                        &fp.p2d,
+                        xy_same_focal,
+                    );
+                    problem.add_residual_block(
+                        2,
+                        vec![
+                            (params_name.clone(), params_len),
+                            (rvec_0_b_name.clone(), 3),
+                            (tvec_0_b_name.clone(), 3),
+                            (rvec_i_0_name.clone(), 3),
+                            (tvec_i_0_name.clone(), 3),
+                        ],
+                        Box::new(cost),
+                        Some(Box::new(HuberLoss::new(1.0))),
+                    );
+                }
+            }
+            if cam_idx == 0 {
+                initial_values
+                    .entry(rvec_0_b_name)
+                    .or_insert(rtvec.na_rvec());
+                initial_values
+                    .entry(tvec_0_b_name)
+                    .or_insert(rtvec.na_tvec());
+            } else {
+                // 0 <- i <- board
+                let rtvec_0_b = (t_cam_i_0[cam_idx].to_na_isometry3().inverse()
+                    * rtvec.to_na_isometry3())
+                .to_rvec_tvec();
+                initial_values
+                    .entry(rvec_0_b_name)
+                    .or_insert(rtvec_0_b.na_rvec());
+                initial_values
+                    .entry(tvec_0_b_name)
+                    .or_insert(rtvec_0_b.na_tvec());
+            }
+        }
+
+        set_problem_parameter_bound(&params_name, &mut problem, generic_camera, xy_same_focal);
+        set_problem_parameter_disabled(
+            &params_name,
+            &mut problem,
+            &mut initial_values,
+            generic_camera,
+            xy_same_focal,
+            disabled_distortions,
+        );
+    }
+    if cam0_fixed_focal {
+        println!("set focal");
+        problem.fix_variable("params0", 0);
+    }
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+
+    let result_option = optimizer.optimize(&problem, &initial_values, None);
+    if let Some(mut result) = result_option {
+        let mut result_intrinsics = Vec::new();
+        let mut result_t_i_0 = Vec::new();
+        for (cam_idx, generic_camera) in cameras.iter().enumerate() {
+            let params_name = format!("params{}", cam_idx);
+            let mut new_params = result.remove(&params_name).unwrap();
+            if xy_same_focal {
+                // remove fy
+                new_params = new_params.clone().insert_row(1, new_params[0]);
+            };
+            println!("params {}", new_params);
+            let mut calibrated_camera = *generic_camera;
+            calibrated_camera.set_params(&new_params);
+            result_intrinsics.push(calibrated_camera);
+            let t_i_0 = if cam_idx == 0 {
+                RvecTvec::new(&na::dvector![0.0, 0.0, 0.0], &na::dvector![0.0, 0.0, 0.0])
+            } else {
+                let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
+                let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
+                RvecTvec::new(
+                    &result.remove(&rvec_i_0_name).unwrap(),
+                    &result.remove(&tvec_i_0_name).unwrap(),
+                )
+            };
+            result_t_i_0.push(t_i_0);
+        }
+        let board_rtvec_vec: HashMap<usize, RvecTvec> = valid_frame_board_to_cam0
+            .iter()
+            .map(|&valid_frame_idx| {
+                let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
+                let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
+                (
+                    valid_frame_idx,
+                    RvecTvec::new(
+                        &result.remove(&rvec_0_b_name).unwrap(),
+                        &result.remove(&tvec_0_b_name).unwrap(),
+                    ),
+                )
+            })
+            .collect();
+        Some((result_intrinsics, result_t_i_0, board_rtvec_vec))
+    } else {
+        None
+    }
 }
 
 pub fn validation(
+    cam_idx: usize,
     final_result: &GenericModel<f64>,
-    rtvec_list: &[RvecTvec],
+    rtvec_list: &HashMap<usize, RvecTvec>,
     detected_feature_frames: &[Option<FrameFeature>],
     recording_option: Option<&rerun::RecordingStream>,
-) {
-    let time_reprojection_errors_p2ds: Vec<_> = detected_feature_frames
+) -> (f64, f64) {
+    let time_reprojection_errors_p2ds: Vec<_> = rtvec_list
         .iter()
-        .filter_map(|f| f.clone())
-        .enumerate()
-        .map(|(i, f)| {
-            let tvec = na::Vector3::new(
-                rtvec_list[i].tvec[0],
-                rtvec_list[i].tvec[1],
-                rtvec_list[i].tvec[2],
-            );
-            let rvec = na::Vector3::new(
-                rtvec_list[i].rvec[0],
-                rtvec_list[i].rvec[1],
-                rtvec_list[i].rvec[2],
-            );
-            let transform = na::Isometry3::new(tvec, rvec);
+        .filter_map(|(&i, rtvec)| {
+            detected_feature_frames[i].as_ref()?;
+            let f = detected_feature_frames[i].clone().unwrap();
+            let transform = rtvec.to_na_isometry3();
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
                 .features
                 .values()
@@ -497,20 +719,20 @@ pub fn validation(
                     .collect();
                 recording.set_time_nanos("stable", f.time_ns);
                 recording
-                    .log("/board", &rerun::Points3D::new(p3p_rerun))
-                    .unwrap();
-                recording
-                    .log("/camera_coordinate", &rerun::Transform3D::IDENTITY)
+                    .log(
+                        format!("/cam{}/board", cam_idx),
+                        &rerun::Points3D::new(p3p_rerun),
+                    )
                     .unwrap();
                 let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
                 recording
                     .log(
-                        "/board/reprojection_err",
+                        format!("/cam{}/board/reprojection_err", cam_idx),
                         &rerun::TextLog::new(format!("{} px", avg_err)),
                     )
                     .unwrap();
             };
-            (f.time_ns, reprojection, p2ds)
+            Some((f.time_ns, reprojection, p2ds))
         })
         .collect();
     let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
@@ -519,9 +741,10 @@ pub fn validation(
         .collect();
     println!("total pts: {}", reprojection_errors.len());
     reprojection_errors.sort_by(|&a, b| a.partial_cmp(b).unwrap());
+    let median_reprojection_error = reprojection_errors[reprojection_errors.len() / 2];
     println!(
         "Median reprojection error: {} px",
-        reprojection_errors[reprojection_errors.len() / 2]
+        median_reprojection_error
     );
     let len_99_percent = reprojection_errors.len() * 99 / 100;
     let avg_99_percent = reprojection_errors
@@ -531,6 +754,7 @@ pub fn validation(
         .sum::<f64>();
     println!("Avg reprojection error of 99%: {} px", avg_99_percent);
     if let Some(recording) = recording_option {
+        let topic = format!("/cam{}/rep_err", cam_idx);
         let color_gradient = colorous::ORANGE_RED;
         let min_v = 0.2;
         for (time_ns, reps, p2ds) in &time_reprojection_errors_p2ds {
@@ -544,10 +768,9 @@ pub fn validation(
                 })
                 .unzip();
             recording.set_time_nanos("stable", *time_ns);
-
             recording
                 .log(
-                    "/detected",
+                    topic.to_string(),
                     &rerun::Points2D::new(rerun_shift(p2ds))
                         .with_colors(colors)
                         .with_radii([rerun::Radius::new_ui_points(1.0)])
@@ -556,4 +779,72 @@ pub fn validation(
                 .unwrap();
         }
     }
+    (avg_99_percent, median_reprojection_error)
+}
+
+pub fn init_and_calibrate_one_camera(
+    cam_idx: usize,
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    target_model: &GenericModel<f64>,
+    recording: &RecordingStream,
+    fixed_focal: Option<f64>,
+    disabled_distortion_num: usize,
+    one_focal: bool,
+) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
+    let (frame0, frame1) = find_best_two_frames(&cams_detected_feature_frames[cam_idx]);
+
+    let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0]
+        .clone()
+        .unwrap();
+    let frame_feature1 = &cams_detected_feature_frames[cam_idx][frame1]
+        .clone()
+        .unwrap();
+
+    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
+    key_frames.iter().enumerate().for_each(|(i, k)| {
+        let topic = format!("/cam{}/keyframe{}", cam_idx, i);
+        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
+        recording
+            .log(topic, &rerun::TextLog::new("keyframe"))
+            .unwrap();
+    });
+
+    let mut initial_camera = GenericModel::UCM(UCM::zeros());
+    for i in 0..10 {
+        log::trace!("Initialize ucm {}", i);
+        if let Some(initialized_ucm) = try_init_camera(frame_feature0, frame_feature1, fixed_focal)
+        {
+            initial_camera = initialized_ucm;
+            break;
+        }
+    }
+    if initial_camera.params()[0] == 0.0 {
+        println!("calibration failed.");
+        return None;
+    }
+    let mut final_model = *target_model;
+    final_model.set_w_h(
+        initial_camera.width().round() as u32,
+        initial_camera.height().round() as u32,
+    );
+    convert_model(&initial_camera, &mut final_model, disabled_distortion_num);
+    println!("Converted {:?}", final_model);
+    let (one_focal, fixed_focal) = if let Some(focal) = fixed_focal {
+        // if fixed focal then set one focal true
+        let mut p = final_model.params();
+        p[0] = focal;
+        p[1] = focal;
+        final_model.set_params(&p);
+        (true, true)
+    } else {
+        (one_focal, false)
+    };
+
+    calib_camera(
+        &cams_detected_feature_frames[cam_idx],
+        &final_model,
+        one_focal,
+        disabled_distortion_num,
+        fixed_focal,
+    )
 }
