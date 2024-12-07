@@ -212,13 +212,14 @@ fn main() {
             log_feature_frames(&recording, &topic, feature_frames);
             let mut calibrated_result: Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> = None;
             let max_trail = 3;
+            let cam0_fixed_focal = if cam_idx == 0 { cli.fixed_focal } else { None };
             for _ in 0..max_trail {
                 calibrated_result = init_and_calibrate_one_camera(
                     cam_idx,
                     &cams_detected_feature_frames,
                     &cli.model,
                     &recording,
-                    cli.fixed_focal,
+                    cam0_fixed_focal,
                     cli.disabled_distortion_num,
                     cli.one_focal,
                 );
@@ -237,7 +238,7 @@ fn main() {
                 cam_idx,
                 &final_result,
                 &rtvec_map,
-                &cams_detected_feature_frames[cam_idx],
+                feature_frames,
                 Some(&recording),
             );
             println!(
@@ -252,6 +253,30 @@ fn main() {
         })
         .unzip();
     if _calibrated_intrinsics.len() > 1 {
-        init_camera_extrinsic(&_cam_rtvecs);
+        let times: Vec<HashMap<usize, i64>> = cams_detected_feature_frames
+            .iter()
+            .map(|f| {
+                f.iter()
+                    .enumerate()
+                    .filter_map(|f| {
+                        if f.1.is_none() {
+                            None
+                        } else {
+                            Some((f.0, f.1.clone().unwrap().time_ns))
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let t_cam_i_0 = init_camera_extrinsic(&_cam_rtvecs, &recording, &times);
+        calib_all_camera_with_extrinsics(
+            &_calibrated_intrinsics,
+            &t_cam_i_0,
+            &_cam_rtvecs,
+            &cams_detected_feature_frames,
+            cli.one_focal,
+            cli.disabled_distortion_num,
+            cli.fixed_focal.is_some(),
+        );
     }
 }

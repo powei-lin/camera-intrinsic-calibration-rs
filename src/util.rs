@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
-use crate::types::RvecTvec;
+use crate::types::{RvecTvec, ToRvecTvec};
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
@@ -458,17 +458,58 @@ pub fn calib_camera(
     Some((calibrated_camera, rtvec_vec))
 }
 
-pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
-    (1..cam_rtvecs.len())
+pub fn na_isometry3_to_rerun_transform3d(transform: &na::Isometry3<f64>) -> rerun::Transform3D {
+    let t = (
+        transform.translation.x as f32,
+        transform.translation.y as f32,
+        transform.translation.z as f32,
+    );
+    let q_xyzw = (
+        transform.rotation.quaternion().i as f32,
+        transform.rotation.quaternion().j as f32,
+        transform.rotation.quaternion().k as f32,
+        transform.rotation.quaternion().w as f32,
+    );
+    rerun::Transform3D::from_translation_rotation(t, rerun::Quaternion::from_xyzw(q_xyzw.into()))
+}
+
+pub fn init_camera_extrinsic(
+    cam_rtvecs: &[HashMap<usize, RvecTvec>],
+    recording: &rerun::RecordingStream,
+    times: &[HashMap<usize, i64>],
+) -> Vec<RvecTvec> {
+    (0..cam_rtvecs.len())
         .map(|cam_i| {
+            if cam_i == 0 {
+                return RvecTvec::new(
+                    na::Vector3::zeros().to_dvec(),
+                    na::Vector3::zeros().to_dvec(),
+                );
+            }
             let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
             let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
-            let key_intersection = cam_0_keys.intersection(&cam_i_keys);
+            let key_intersection: Vec<_> = cam_0_keys.intersection(&cam_i_keys).collect();
             let t_0_b_and_t_i_b: Vec<_> = key_intersection
                 .into_iter()
                 .map(|k| {
                     let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
                     let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
+                    let t0 = times[0].get(k).unwrap();
+                    let t1 = times[cam_i].get(k).unwrap();
+                    recording.set_time_nanos("stable", *t0);
+                    recording
+                        .log(
+                            format!("/k0"),
+                            &na_isometry3_to_rerun_transform3d(&t_0_b.inverse()),
+                        )
+                        .unwrap();
+                    recording.set_time_nanos("stable", *t1);
+                    recording
+                        .log(
+                            format!("/k1"),
+                            &na_isometry3_to_rerun_transform3d(&t_i_b.inverse()),
+                        )
+                        .unwrap();
                     (t_0_b, t_i_b)
                 })
                 .collect();
@@ -476,13 +517,13 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
             let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
             for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
                 let td = t_i_b.inverse() * t_i_0_init * t_0_b;
-                print!("td {}", td);
+                // print!("td {}", td);
                 let cost = SE3Factor::new(t_0_b, t_i_b);
                 problem.add_residual_block(
                     6,
                     vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
                     Box::new(cost),
-                    Some(Box::new(HuberLoss::new(0.1))),
+                    Some(Box::new(HuberLoss::new(0.5))),
                 );
             }
             let rvec = t_i_0_init.rotation.scaled_axis().to_dvec();
@@ -513,8 +554,96 @@ pub fn calib_all_camera_with_extrinsics(
     cameras: &[GenericModel<f64>],
     t_cam_i_0: &[RvecTvec],
     cam_rtvecs: &[HashMap<usize, RvecTvec>],
-    cams_detected_feature_frames: Vec<Vec<Option<FrameFeature>>>,
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    xy_same_focal: bool,
+    disabled_distortions: usize,
+    cam0_fixed_focal: bool,
 ) {
+    let mut problem = tiny_solver::Problem::new();
+    let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
+    for (cam_idx, generic_camera) in cameras.iter().enumerate() {
+        let params_name = format!("params{}", cam_idx);
+        let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
+        let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
+        let mut params = generic_camera.params();
+        if xy_same_focal {
+            // remove fy
+            params = params.remove_row(1);
+        };
+        let params_len = params.len();
+        initial_values.insert(params_name.clone(), params);
+        initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].rvec.clone());
+        initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].tvec.clone());
+
+        for (&valid_frame_idx, rtvec) in &cam_rtvecs[cam_idx] {
+            let frame_feature = cams_detected_feature_frames[cam_idx][valid_frame_idx]
+                .clone()
+                .unwrap();
+            let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
+            let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
+            for fp in frame_feature.features.values() {
+                let cost = OtherCamReprojectionFactor::new(
+                    generic_camera,
+                    &fp.p3d,
+                    &fp.p2d,
+                    xy_same_focal,
+                );
+                problem.add_residual_block(
+                    2,
+                    vec![
+                        (params_name.clone(), params_len),
+                        (rvec_0_b_name.clone(), 3),
+                        (tvec_0_b_name.clone(), 3),
+                        (rvec_i_0_name.clone(), 3),
+                        (tvec_i_0_name.clone(), 3),
+                    ],
+                    Box::new(cost),
+                    Some(Box::new(HuberLoss::new(1.0))),
+                );
+            }
+            if cam_idx == 0 {
+                initial_values
+                    .entry(rvec_0_b_name)
+                    .or_insert(rtvec.rvec.clone());
+                initial_values
+                    .entry(tvec_0_b_name)
+                    .or_insert(rtvec.tvec.clone());
+            } else {
+                // 0 <- i <- board
+                let rtvec_0_b = (t_cam_i_0[cam_idx].to_na_isometry3().inverse()
+                    * rtvec.to_na_isometry3())
+                .to_rvec_tvec();
+                initial_values
+                    .entry(rvec_0_b_name)
+                    .or_insert(rtvec_0_b.rvec);
+                initial_values
+                    .entry(tvec_0_b_name)
+                    .or_insert(rtvec_0_b.tvec);
+            }
+        }
+
+        set_problem_parameter_bound(&params_name, &mut problem, generic_camera, xy_same_focal);
+        set_problem_parameter_disabled(
+            &params_name,
+            &mut problem,
+            &mut initial_values,
+            generic_camera,
+            xy_same_focal,
+            disabled_distortions,
+        );
+    }
+    for row in 0..3 {
+        // fixed cam0 extrinsic
+        problem.fix_variable("rvec_0_0", row);
+        problem.fix_variable("tvec_0_0", row);
+    }
+    if cam0_fixed_focal {
+        println!("set focal");
+        problem.fix_variable("params0", 0);
+    }
+    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+
+    let result_option = optimizer.optimize(&problem, &initial_values, None);
 }
 
 pub fn validation(

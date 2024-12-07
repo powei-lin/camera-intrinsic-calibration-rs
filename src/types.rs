@@ -13,6 +13,17 @@ impl RvecTvec {
     }
 }
 
+pub trait ToRvecTvec {
+    fn to_rvec_tvec(&self) -> RvecTvec;
+}
+impl ToRvecTvec for na::Isometry3<f64> {
+    fn to_rvec_tvec(&self) -> RvecTvec {
+        let rvec = self.rotation.scaled_axis().to_dvec();
+        let tvec = na::dvector![self.translation.x, self.translation.y, self.translation.z,];
+        RvecTvec { rvec, tvec }
+    }
+}
+
 pub trait Vec3DVec<T: Clone> {
     fn to_dvec(&self) -> na::DVector<T>;
 }
