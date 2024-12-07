@@ -76,5 +76,5 @@ Papers:
 * Kukelova, Zuzana, et al. "Radial distortion homography." Proceedings of the IEEE conference on computer vision and pattern recognition. 2015.
 
 ### TODO
-* [ ] Multi-camera extrinsic
-* [ ] More calibration info
+* [x] Multi-camera extrinsic
+* [x] More calibration info
