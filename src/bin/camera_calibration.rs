@@ -269,6 +269,9 @@ fn main() {
             })
             .collect();
         let t_cam_i_0 = init_camera_extrinsic(&_cam_rtvecs, &recording, &times);
+        for t in &t_cam_i_0 {
+            println!("r {} t {}", t.rvec, t.tvec);
+        }
         calib_all_camera_with_extrinsics(
             &_calibrated_intrinsics,
             &t_cam_i_0,

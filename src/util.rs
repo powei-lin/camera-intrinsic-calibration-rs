@@ -503,7 +503,7 @@ pub fn init_camera_extrinsic(
                             &na_isometry3_to_rerun_transform3d(&t_0_b.inverse()),
                         )
                         .unwrap();
-                    recording.set_time_nanos("stable", *t1);
+                    // recording.set_time_nanos("stable", *t1);
                     recording
                         .log(
                             format!("/k1"),

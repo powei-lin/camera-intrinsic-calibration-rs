@@ -206,8 +206,8 @@ impl Factor for OtherCamReprojectionFactor {
         let rvec0 = params[1].to_vec3();
         let tvec0 = params[2].to_vec3();
         let t_0_b = na::Isometry3::new(tvec0, rvec0);
-        let rvec1 = params[1].to_vec3();
-        let tvec1 = params[2].to_vec3();
+        let rvec1 = params[3].to_vec3();
+        let tvec1 = params[4].to_vec3();
         let t_i_0 = na::Isometry3::new(tvec1, rvec1);
         let p3d_t = t_i_0 * t_0_b * self.p3d.clone();
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
