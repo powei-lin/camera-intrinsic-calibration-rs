@@ -1,3 +1,5 @@
+use crate::types::DVecVec3;
+
 use camera_intrinsic_model::*;
 use nalgebra as na;
 use num_dual::DualDVec64;
@@ -101,16 +103,18 @@ impl Factor for UCMInitFocalAlphaFactor {
         cam_params[1] = params[0][0].clone();
         cam_params[4] = params[0][1].clone();
         let model = self.target.new_from_params(&cam_params);
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
+        let rvec = params[1].to_vec3();
+        let tvec = params[2].to_vec3();
+        // let rvec = na::Vector3::new(
+        //     params[1][0].clone(),
+        //     params[1][1].clone(),
+        //     params[1][2].clone(),
+        // );
+        // let tvec = na::Vector3::new(
+        //     params[2][0].clone(),
+        //     params[2][1].clone(),
+        //     params[2][2].clone(),
+        // );
         let transform = na::Isometry3::new(tvec, rvec);
         let p3d_t = transform * self.p3d.clone();
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
@@ -159,16 +163,18 @@ impl Factor for ReprojectionFactor {
             params0 = params0.clone().insert_row(1, params0[0].clone());
         }
         let model = self.target.new_from_params(&params0);
-        let rvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[2][0].clone(),
-            params[2][1].clone(),
-            params[2][2].clone(),
-        );
+        let rvec = params[1].to_vec3();
+        let tvec = params[2].to_vec3();
+        // let rvec = na::Vector3::new(
+        //     params[1][0].clone(),
+        //     params[1][1].clone(),
+        //     params[1][2].clone(),
+        // );
+        // let tvec = na::Vector3::new(
+        //     params[2][0].clone(),
+        //     params[2][1].clone(),
+        //     params[2][2].clone(),
+        // );
         let transform = na::Isometry3::new(tvec, rvec);
         let p3d_t = transform * self.p3d.clone();
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());

@@ -7,6 +7,7 @@ use crate::types::RvecTvec;
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
+use super::types::{DVecVec3, Vec3DVec};
 use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
@@ -453,48 +454,56 @@ pub fn calib_camera(
     Some((calibrated_camera, rtvec_vec))
 }
 
-pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) {
-    for cam_i in 1..cam_rtvecs.len() {
-        let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
-        let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
-        let key_intersection = cam_0_keys.intersection(&cam_i_keys);
-        let t_0_b_and_t_i_b: Vec<_> = key_intersection
-            .into_iter()
-            .map(|k| {
-                let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
-                let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
-                (t_0_b, t_i_b)
-            })
-            .collect();
-        let mut problem = tiny_solver::Problem::new();
-        for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
-            let cost = SE3Factor::new(t_0_b, t_i_b);
-            problem.add_residual_block(
-                6,
-                vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
-                Box::new(cost),
-                Some(Box::new(HuberLoss::new(1.0))),
-            );
-        }
-        let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
-        let rvec_i_0_init = t_i_0_init.rotation.scaled_axis();
-        let rvec = na::dvector![rvec_i_0_init[0], rvec_i_0_init[1], rvec_i_0_init[2]];
-        let tvec = na::dvector![
-            t_i_0_init.translation.x,
-            t_i_0_init.translation.y,
-            t_i_0_init.translation.z,
-        ];
-        let initial_values = HashMap::<String, na::DVector<f64>>::from([
-            ("rvec".to_string(), rvec),
-            ("tvec".to_string(), tvec),
-        ]);
+pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
+    (1..cam_rtvecs.len())
+        .into_iter()
+        .map(|cam_i| {
+            let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
+            let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
+            let key_intersection = cam_0_keys.intersection(&cam_i_keys);
+            let t_0_b_and_t_i_b: Vec<_> = key_intersection
+                .into_iter()
+                .map(|k| {
+                    let t_0_b = cam_rtvecs[0].get(k).unwrap().to_na_isometry3();
+                    let t_i_b = cam_rtvecs[cam_i].get(k).unwrap().to_na_isometry3();
+                    (t_0_b, t_i_b)
+                })
+                .collect();
+            let mut problem = tiny_solver::Problem::new();
+            let t_i_0_init = t_0_b_and_t_i_b[0].1 * t_0_b_and_t_i_b[0].0.inverse();
+            for (t_0_b, t_i_b) in &t_0_b_and_t_i_b {
+                let td = t_i_b.inverse() * t_i_0_init * t_0_b;
+                print!("td {}", td);
+                let cost = SE3Factor::new(t_0_b, t_i_b);
+                problem.add_residual_block(
+                    6,
+                    vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
+                    Box::new(cost),
+                    Some(Box::new(HuberLoss::new(0.1))),
+                );
+            }
+            let rvec = t_i_0_init.rotation.scaled_axis().to_dvec();
+            let tvec = na::dvector![
+                t_i_0_init.translation.x,
+                t_i_0_init.translation.y,
+                t_i_0_init.translation.z,
+            ];
+            let initial_values = HashMap::<String, na::DVector<f64>>::from([
+                ("rvec".to_string(), rvec),
+                ("tvec".to_string(), tvec),
+            ]);
 
-        let optimizer = tiny_solver::GaussNewtonOptimizer {};
-        let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
-        println!("extrinsic cam{} cam0", cam_i);
-        println!("rvec: {}", result["rvec"]);
-        println!("tvec: {}", result["tvec"]);
-    }
+            let optimizer = tiny_solver::GaussNewtonOptimizer {};
+            let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
+            println!("extrinsic cam{} cam0", cam_i);
+            println!("rvec: {}", result["rvec"]);
+            println!("tvec: {}", result["tvec"]);
+            RvecTvec {
+                rvec: result.get("rvec").unwrap().clone(),
+                tvec: result.get("tvec").unwrap().clone(),
+            }
+        })
+        .collect()
 }
 
 pub fn validation(
@@ -508,9 +517,7 @@ pub fn validation(
         .iter()
         .map(|(&i, rtvec)| {
             let f = detected_feature_frames[i].clone().unwrap();
-            let tvec = na::Vector3::new(rtvec.tvec[0], rtvec.tvec[1], rtvec.tvec[2]);
-            let rvec = na::Vector3::new(rtvec.rvec[0], rtvec.rvec[1], rtvec.rvec[2]);
-            let transform = na::Isometry3::new(tvec, rvec);
+            let transform = na::Isometry3::new(rtvec.tvec.to_vec3(), rtvec.rvec.to_vec3());
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
                 .features
                 .values()
