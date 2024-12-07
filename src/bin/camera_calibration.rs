@@ -69,7 +69,6 @@ struct CCRSCli {
     fixed_focal: Option<f64>,
 }
 
-
 fn main() {
     env_logger::init();
 
