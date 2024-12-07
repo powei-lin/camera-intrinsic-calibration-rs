@@ -185,10 +185,7 @@ fn main() {
     ) {
         let mut rep_rms = Vec::new();
         for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
-            model_to_json(
-                &format!("{}/cam{}.json", output_folder, cam_idx),
-                intrinsic,
-            );
+            model_to_json(&format!("{}/cam{}.json", output_folder, cam_idx), intrinsic);
             let new_rtvec_map: HashMap<usize, RvecTvec> = board_rtvecs
                 .iter()
                 .map(|(k, t_0_b)| {
@@ -242,10 +239,7 @@ fn main() {
                 cam_idx,
                 serde_json::to_string_pretty(intrinsic).unwrap()
             );
-            model_to_json(
-                &format!("{}/cam{}.json", output_folder, cam_idx),
-                intrinsic,
-            );
+            model_to_json(&format!("{}/cam{}.json", output_folder, cam_idx), intrinsic);
         }
         write_report(&format!("{}/report.txt", output_folder), false, &rep_rms);
     }

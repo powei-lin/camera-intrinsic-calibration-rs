@@ -526,6 +526,8 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
         .collect()
 }
 
+type Intrinsics = Vec<GenericModel<f64>>;
+
 pub fn calib_all_camera_with_extrinsics(
     cameras: &[GenericModel<f64>],
     t_cam_i_0: &[RvecTvec],
@@ -534,11 +536,7 @@ pub fn calib_all_camera_with_extrinsics(
     xy_same_focal: bool,
     disabled_distortions: usize,
     cam0_fixed_focal: bool,
-) -> Option<(
-    Vec<GenericModel<f64>>,
-    Vec<RvecTvec>,
-    HashMap<usize, RvecTvec>,
-)> {
+) -> Option<(Intrinsics, Vec<RvecTvec>, HashMap<usize, RvecTvec>)> {
     let mut problem = tiny_solver::Problem::new();
     let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
     let mut valid_frame_board_to_cam0 = HashSet::new();
