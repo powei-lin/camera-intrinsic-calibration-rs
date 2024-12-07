@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
-use crate::types::{RvecTvec, ToRvecTvec};
+use crate::types::{Intrinsics, RvecTvec, ToRvecTvec};
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
@@ -525,8 +525,6 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
         })
         .collect()
 }
-
-type Intrinsics = Vec<GenericModel<f64>>;
 
 pub fn calib_all_camera_with_extrinsics(
     cameras: &[GenericModel<f64>],

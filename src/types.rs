@@ -1,3 +1,4 @@
+use camera_intrinsic_model::GenericModel;
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +25,8 @@ impl RvecTvec {
         na::dvector![self.tvec.0, self.tvec.1, self.tvec.2]
     }
 }
+
+pub type Intrinsics = Vec<GenericModel<f64>>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Extrinsics {
