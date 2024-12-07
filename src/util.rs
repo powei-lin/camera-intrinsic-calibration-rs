@@ -456,7 +456,6 @@ pub fn calib_camera(
 
 pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
     (1..cam_rtvecs.len())
-        .into_iter()
         .map(|cam_i| {
             let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
             let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
