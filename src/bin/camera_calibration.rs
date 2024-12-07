@@ -252,7 +252,7 @@ fn main() {
             (final_result, rtvec_map)
         })
         .unzip();
-    if _calibrated_intrinsics.len() > 1 {
+    if _calibrated_intrinsics.len() > 0 {
         let times: Vec<HashMap<usize, i64>> = cams_detected_feature_frames
             .iter()
             .map(|f| {

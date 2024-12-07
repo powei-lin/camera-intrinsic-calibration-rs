@@ -563,8 +563,6 @@ pub fn calib_all_camera_with_extrinsics(
     let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
     for (cam_idx, generic_camera) in cameras.iter().enumerate() {
         let params_name = format!("params{}", cam_idx);
-        let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
-        let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
         let mut params = generic_camera.params();
         if xy_same_focal {
             // remove fy
@@ -572,8 +570,13 @@ pub fn calib_all_camera_with_extrinsics(
         };
         let params_len = params.len();
         initial_values.insert(params_name.clone(), params);
-        initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].rvec.clone());
-        initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].tvec.clone());
+
+        let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
+        let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
+        if cam_idx > 0 {
+            initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].rvec.clone());
+            initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].tvec.clone());
+        }
 
         for (&valid_frame_idx, rtvec) in &cam_rtvecs[cam_idx] {
             let frame_feature = cams_detected_feature_frames[cam_idx][valid_frame_idx]
@@ -582,24 +585,39 @@ pub fn calib_all_camera_with_extrinsics(
             let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
             let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
             for fp in frame_feature.features.values() {
-                let cost = OtherCamReprojectionFactor::new(
-                    generic_camera,
-                    &fp.p3d,
-                    &fp.p2d,
-                    xy_same_focal,
-                );
-                problem.add_residual_block(
-                    2,
-                    vec![
-                        (params_name.clone(), params_len),
-                        (rvec_0_b_name.clone(), 3),
-                        (tvec_0_b_name.clone(), 3),
-                        (rvec_i_0_name.clone(), 3),
-                        (tvec_i_0_name.clone(), 3),
-                    ],
-                    Box::new(cost),
-                    Some(Box::new(HuberLoss::new(1.0))),
-                );
+                if cam_idx == 0 {
+                    let cost =
+                        ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
+                    problem.add_residual_block(
+                        2,
+                        vec![
+                            (params_name.clone(), params_len),
+                            (rvec_0_b_name.clone(), 3),
+                            (tvec_0_b_name.clone(), 3),
+                        ],
+                        Box::new(cost),
+                        Some(Box::new(HuberLoss::new(1.0))),
+                    );
+                } else {
+                    let cost = OtherCamReprojectionFactor::new(
+                        generic_camera,
+                        &fp.p3d,
+                        &fp.p2d,
+                        xy_same_focal,
+                    );
+                    problem.add_residual_block(
+                        2,
+                        vec![
+                            (params_name.clone(), params_len),
+                            (rvec_0_b_name.clone(), 3),
+                            (tvec_0_b_name.clone(), 3),
+                            (rvec_i_0_name.clone(), 3),
+                            (tvec_i_0_name.clone(), 3),
+                        ],
+                        Box::new(cost),
+                        Some(Box::new(HuberLoss::new(1.0))),
+                    );
+                }
             }
             if cam_idx == 0 {
                 initial_values
@@ -631,11 +649,6 @@ pub fn calib_all_camera_with_extrinsics(
             xy_same_focal,
             disabled_distortions,
         );
-    }
-    for row in 0..3 {
-        // fixed cam0 extrinsic
-        problem.fix_variable("rvec_0_0", row);
-        problem.fix_variable("tvec_0_0", row);
     }
     if cam0_fixed_focal {
         println!("set focal");
