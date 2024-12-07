@@ -204,7 +204,7 @@ fn main() {
         "avg: {} sec",
         duration_sec / cams_detected_feature_frames[0].len() as f64
     );
-    let (_calibrated_intrinsics, _cam_rtvecs): (Vec<_>, Vec<_>) = cams_detected_feature_frames
+    let (calibrated_intrinsics, cam_rtvecs): (Vec<_>, Vec<_>) = cams_detected_feature_frames
         .iter()
         .enumerate()
         .map(|(cam_idx, feature_frames)| {
@@ -252,34 +252,39 @@ fn main() {
             (final_result, rtvec_map)
         })
         .unzip();
-    if _calibrated_intrinsics.len() > 0 {
-        let times: Vec<HashMap<usize, i64>> = cams_detected_feature_frames
-            .iter()
-            .map(|f| {
-                f.iter()
-                    .enumerate()
-                    .filter_map(|f| {
-                        if f.1.is_none() {
-                            None
-                        } else {
-                            Some((f.0, f.1.clone().unwrap().time_ns))
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-        let t_cam_i_0 = init_camera_extrinsic(&_cam_rtvecs, &recording, &times);
-        for t in &t_cam_i_0 {
-            println!("r {} t {}", t.rvec, t.tvec);
+    let times: Vec<HashMap<usize, i64>> = cams_detected_feature_frames
+        .iter()
+        .map(|f| {
+            f.iter()
+                .enumerate()
+                .filter_map(|f| {
+                    if f.1.is_none() {
+                        None
+                    } else {
+                        Some((f.0, f.1.clone().unwrap().time_ns))
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let t_cam_i_0 = init_camera_extrinsic(&cam_rtvecs, &recording, &times);
+    for t in &t_cam_i_0 {
+        println!("r {} t {}", t.rvec, t.tvec);
+    }
+    if let Some((camera_intrinsics, t_i_0, board_rtvecs)) = calib_all_camera_with_extrinsics(
+        &calibrated_intrinsics,
+        &t_cam_i_0,
+        &cam_rtvecs,
+        &cams_detected_feature_frames,
+        cli.one_focal,
+        cli.disabled_distortion_num,
+        cli.fixed_focal.is_some(),
+    ) {
+        for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
+            model_to_json(
+                &format!("{}/final_cam{}.json", output_folder, cam_idx),
+                &intrinsic,
+            );
         }
-        calib_all_camera_with_extrinsics(
-            &_calibrated_intrinsics,
-            &t_cam_i_0,
-            &_cam_rtvecs,
-            &cams_detected_feature_frames,
-            cli.one_focal,
-            cli.disabled_distortion_num,
-            cli.fixed_focal.is_some(),
-        );
     }
 }

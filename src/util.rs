@@ -558,9 +558,14 @@ pub fn calib_all_camera_with_extrinsics(
     xy_same_focal: bool,
     disabled_distortions: usize,
     cam0_fixed_focal: bool,
-) {
+) -> Option<(
+    Vec<GenericModel<f64>>,
+    Vec<RvecTvec>,
+    HashMap<usize, RvecTvec>,
+)> {
     let mut problem = tiny_solver::Problem::new();
     let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
+    let mut valid_frame_board_to_cam0 = HashSet::new();
     for (cam_idx, generic_camera) in cameras.iter().enumerate() {
         let params_name = format!("params{}", cam_idx);
         let mut params = generic_camera.params();
@@ -584,6 +589,7 @@ pub fn calib_all_camera_with_extrinsics(
                 .unwrap();
             let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
             let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
+            valid_frame_board_to_cam0.insert(valid_frame_idx);
             for fp in frame_feature.features.values() {
                 if cam_idx == 0 {
                     let cost =
@@ -657,6 +663,53 @@ pub fn calib_all_camera_with_extrinsics(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     let result_option = optimizer.optimize(&problem, &initial_values, None);
+    if let Some(mut result) = result_option {
+        let mut result_intrinsics = Vec::new();
+        let mut result_t_i_0 = Vec::new();
+        for (cam_idx, generic_camera) in cameras.iter().enumerate() {
+            let params_name = format!("params{}", cam_idx);
+            let mut new_params = result.remove(&params_name).unwrap();
+            if xy_same_focal {
+                // remove fy
+                new_params = new_params.clone().insert_row(1, new_params[0]);
+            };
+            println!("params {}", new_params);
+            let mut calibrated_camera = *generic_camera;
+            calibrated_camera.set_params(&new_params);
+            result_intrinsics.push(calibrated_camera);
+            let t_i_0 = if cam_idx == 0 {
+                RvecTvec {
+                    rvec: na::dvector![0.0, 0.0, 0.0],
+                    tvec: na::dvector![0.0, 0.0, 0.0],
+                }
+            } else {
+                let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
+                let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
+                RvecTvec {
+                    rvec: result.remove(&rvec_i_0_name).unwrap(),
+                    tvec: result.remove(&tvec_i_0_name).unwrap(),
+                }
+            };
+            result_t_i_0.push(t_i_0);
+        }
+        let board_rtvec_vec: HashMap<usize, RvecTvec> = valid_frame_board_to_cam0
+            .iter()
+            .map(|&valid_frame_idx| {
+                let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
+                let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
+                (
+                    valid_frame_idx,
+                    RvecTvec {
+                        rvec: result.remove(&rvec_0_b_name).unwrap(),
+                        tvec: result.remove(&tvec_0_b_name).unwrap(),
+                    },
+                )
+            })
+            .collect();
+        Some((result_intrinsics, result_t_i_0, board_rtvec_vec))
+    } else {
+        None
+    }
 }
 
 pub fn validation(
