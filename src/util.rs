@@ -712,10 +712,13 @@ pub fn validation(
     rtvec_list: &HashMap<usize, RvecTvec>,
     detected_feature_frames: &[Option<FrameFeature>],
     recording_option: Option<&rerun::RecordingStream>,
-) {
+) -> (f64, f64) {
     let time_reprojection_errors_p2ds: Vec<_> = rtvec_list
         .iter()
-        .map(|(&i, rtvec)| {
+        .filter_map(|(&i, rtvec)| {
+            if detected_feature_frames[i].is_none() {
+                return None;
+            }
             let f = detected_feature_frames[i].clone().unwrap();
             let transform = rtvec.to_na_isometry3();
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
@@ -756,7 +759,7 @@ pub fn validation(
                     )
                     .unwrap();
             };
-            (f.time_ns, reprojection, p2ds)
+            Some((f.time_ns, reprojection, p2ds))
         })
         .collect();
     let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
@@ -765,9 +768,10 @@ pub fn validation(
         .collect();
     println!("total pts: {}", reprojection_errors.len());
     reprojection_errors.sort_by(|&a, b| a.partial_cmp(b).unwrap());
+    let median_reprojection_error = reprojection_errors[reprojection_errors.len() / 2];
     println!(
         "Median reprojection error: {} px",
-        reprojection_errors[reprojection_errors.len() / 2]
+        median_reprojection_error
     );
     let len_99_percent = reprojection_errors.len() * 99 / 100;
     let avg_99_percent = reprojection_errors
@@ -802,4 +806,5 @@ pub fn validation(
                 .unwrap();
         }
     }
+    (avg_99_percent, median_reprojection_error)
 }

@@ -6,7 +6,7 @@ use camera_intrinsic_calibration::board::{
 };
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::detected_points::FrameFeature;
-use camera_intrinsic_calibration::types::{extrinsics_to_json, Extrinsics, RvecTvec};
+use camera_intrinsic_calibration::types::{extrinsics_to_json, Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
@@ -234,21 +234,6 @@ fn main() {
                 );
             }
             let (final_result, rtvec_map) = calibrated_result.unwrap();
-            validation(
-                cam_idx,
-                &final_result,
-                &rtvec_map,
-                feature_frames,
-                Some(&recording),
-            );
-            println!(
-                "Final params{}",
-                serde_json::to_string_pretty(&final_result).unwrap()
-            );
-            model_to_json(
-                &format!("{}/cam{}.json", output_folder, cam_idx),
-                &final_result,
-            );
             (final_result, rtvec_map)
         })
         .unzip();
@@ -267,13 +252,13 @@ fn main() {
                 .collect()
         })
         .collect();
-    let t_cam_i_0 = init_camera_extrinsic(&cam_rtvecs, &recording, &times);
-    for t in &t_cam_i_0 {
+    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs, &recording, &times);
+    for t in &t_cam_i_0_init {
         println!("r {} t {}", t.na_rvec(), t.na_tvec());
     }
     if let Some((camera_intrinsics, t_i_0, board_rtvecs)) = calib_all_camera_with_extrinsics(
         &calibrated_intrinsics,
-        &t_cam_i_0,
+        &t_cam_i_0_init,
         &cam_rtvecs,
         &cams_detected_feature_frames,
         cli.one_focal,
@@ -282,13 +267,55 @@ fn main() {
     ) {
         for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
             model_to_json(
-                &format!("{}/final_cam{}.json", output_folder, cam_idx),
+                &format!("{}/cam{}.json", output_folder, cam_idx),
                 &intrinsic,
+            );
+            let new_rtvec_map: HashMap<usize, RvecTvec> = board_rtvecs
+                .iter()
+                .map(|(k, t_0_b)| {
+                    (
+                        *k,
+                        (t_i_0[cam_idx].to_na_isometry3() * t_0_b.to_na_isometry3()).to_rvec_tvec(),
+                    )
+                })
+                .collect();
+            let (avg_reprojection, median_reprojection) = validation(
+                cam_idx,
+                intrinsic,
+                &new_rtvec_map,
+                &cams_detected_feature_frames[cam_idx],
+                Some(&recording),
+            );
+            println!(
+                "Cam {} final params with extrinsic{}",
+                cam_idx,
+                serde_json::to_string_pretty(intrinsic).unwrap()
             );
         }
         extrinsics_to_json(
             &format!("{}/extrinsics.json", output_folder),
             &Extrinsics::new(&t_i_0),
         );
+    } else {
+        for (cam_idx, (intrinsic, rtvec_map)) in
+            calibrated_intrinsics.iter().zip(cam_rtvecs).enumerate()
+        {
+            validation(
+                cam_idx,
+                intrinsic,
+                &rtvec_map,
+                &cams_detected_feature_frames[cam_idx],
+                Some(&recording),
+            );
+            println!(
+                "Cam {} final params{}",
+                cam_idx,
+                serde_json::to_string_pretty(intrinsic).unwrap()
+            );
+            model_to_json(
+                &format!("{}/cam{}.json", output_folder, cam_idx),
+                &intrinsic,
+            );
+        }
     }
 }
