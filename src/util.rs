@@ -24,15 +24,16 @@ pub fn rtvec_to_na_dvec(
 }
 
 fn set_problem_parameter_bound(
+    params_name: &str,
     problem: &mut tiny_solver::Problem,
     generic_camera: &GenericModel<f64>,
     xy_same_focal: bool,
 ) {
     let shift = if xy_same_focal { 1 } else { 0 };
-    problem.set_variable_bounds("params", 0, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 1 - shift, 0.0, 10000.0);
-    problem.set_variable_bounds("params", 2 - shift, 0.0, generic_camera.width());
-    problem.set_variable_bounds("params", 3 - shift, 0.0, generic_camera.height());
+    problem.set_variable_bounds(params_name, 0, 0.0, 10000.0);
+    problem.set_variable_bounds(params_name, 1 - shift, 0.0, 10000.0);
+    problem.set_variable_bounds(params_name, 2 - shift, 0.0, generic_camera.width());
+    problem.set_variable_bounds(params_name, 3 - shift, 0.0, generic_camera.height());
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
         log::trace!(
             "set params bound {} {} {}",
@@ -40,10 +41,11 @@ fn set_problem_parameter_bound(
             lower,
             upper
         );
-        problem.set_variable_bounds("params", distortion_idx - shift, lower, upper);
+        problem.set_variable_bounds(params_name, distortion_idx - shift, lower, upper);
     }
 }
 fn set_problem_parameter_disabled(
+    params_name: &str,
     problem: &mut tiny_solver::Problem,
     init_values: &mut HashMap<String, na::DVector<f64>>,
     generic_camera: &GenericModel<f64>,
@@ -53,8 +55,8 @@ fn set_problem_parameter_disabled(
     let shift = if xy_same_focal { 1 } else { 0 };
     for i in 0..disabled_distortions {
         let distortion_idx = generic_camera.params().len() - 1 - shift - i;
-        problem.fix_variable("params", distortion_idx);
-        let params = init_values.get_mut("params").unwrap();
+        problem.fix_variable(params_name, distortion_idx);
+        let params = init_values.get_mut(params_name).unwrap();
         log::trace!(
             "shift {} distortion {} {:?}",
             shift,
@@ -232,8 +234,9 @@ pub fn convert_model(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
 
     // distortion parameter bound
-    set_problem_parameter_bound(&mut problem, target_model, false);
+    set_problem_parameter_bound("params", &mut problem, target_model, false);
     set_problem_parameter_disabled(
+        "params",
         &mut problem,
         &mut initial_values,
         target_model,
@@ -409,8 +412,9 @@ pub fn calib_camera(
     let optimizer = tiny_solver::GaussNewtonOptimizer {};
     // let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
-    set_problem_parameter_bound(&mut problem, generic_camera, xy_same_focal);
+    set_problem_parameter_bound("params", &mut problem, generic_camera, xy_same_focal);
     set_problem_parameter_disabled(
+        "params",
         &mut problem,
         &mut initial_values,
         generic_camera,
@@ -503,6 +507,14 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
             }
         })
         .collect()
+}
+
+pub fn calib_all_camera_with_extrinsics(
+    cameras: &[GenericModel<f64>],
+    t_cam_i_0: &[RvecTvec],
+    cam_rtvecs: &[HashMap<usize, RvecTvec>],
+    cams_detected_feature_frames: Vec<Vec<Option<FrameFeature>>>,
+) {
 }
 
 pub fn validation(

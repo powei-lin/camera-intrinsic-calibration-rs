@@ -173,7 +173,8 @@ fn main() {
         .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
-    let mut cams_detected_feature_frames = match cli.dataset_format {
+    let mut cams_detected_feature_frames: Vec<Vec<Option<FrameFeature>>> = match cli.dataset_format
+    {
         DatasetFormat::Euroc => load_euroc(
             dataset_root,
             &detector,
