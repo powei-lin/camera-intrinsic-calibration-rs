@@ -113,8 +113,8 @@ pub fn try_init_camera(
     // poses
     let (rvec0, tvec0) = rtvec_to_na_dvec(init_pose(frame_feature0, lambda));
     let (rvec1, tvec1) = rtvec_to_na_dvec(init_pose(frame_feature1, lambda));
-    let rtvec0 = RvecTvec::new(rvec0, tvec0);
-    let rtvec1 = RvecTvec::new(rvec1, tvec1);
+    let rtvec0 = RvecTvec::new(&rvec0, &tvec0);
+    let rtvec1 = RvecTvec::new(&rvec1, &tvec1);
 
     let half_w = frame_feature0.img_w_h.0 as f64 / 2.0;
     let half_h = frame_feature0.img_w_h.1 as f64 / 2.0;
@@ -302,10 +302,10 @@ pub fn init_ucm(
 
     let initial_values = HashMap::<String, na::DVector<f64>>::from([
         ("params".to_string(), init_f_alpha),
-        ("rvec0".to_string(), rtvec0.rvec.clone()),
-        ("tvec0".to_string(), rtvec0.tvec.clone()),
-        ("rvec1".to_string(), rtvec1.rvec.clone()),
-        ("tvec1".to_string(), rtvec1.tvec.clone()),
+        ("rvec0".to_string(), rtvec0.na_rvec()),
+        ("tvec0".to_string(), rtvec0.na_tvec()),
+        ("rvec1".to_string(), rtvec1.na_rvec()),
+        ("tvec1".to_string(), rtvec1.na_tvec()),
     ]);
 
     // initialize optimizer
@@ -448,10 +448,10 @@ pub fn calib_camera(
 
             (
                 i,
-                RvecTvec {
-                    rvec: result.remove(&rvec_name).unwrap(),
-                    tvec: result.remove(&tvec_name).unwrap(),
-                },
+                RvecTvec::new(
+                    &result.remove(&rvec_name).unwrap(),
+                    &result.remove(&tvec_name).unwrap(),
+                ),
             )
         })
         .collect();
@@ -482,8 +482,8 @@ pub fn init_camera_extrinsic(
         .map(|cam_i| {
             if cam_i == 0 {
                 return RvecTvec::new(
-                    na::Vector3::zeros().to_dvec(),
-                    na::Vector3::zeros().to_dvec(),
+                    &na::Vector3::zeros().to_dvec(),
+                    &na::Vector3::zeros().to_dvec(),
                 );
             }
             let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
@@ -542,10 +542,7 @@ pub fn init_camera_extrinsic(
             println!("extrinsic cam{} cam0", cam_i);
             println!("rvec: {}", result["rvec"]);
             println!("tvec: {}", result["tvec"]);
-            RvecTvec {
-                rvec: result.get("rvec").unwrap().clone(),
-                tvec: result.get("tvec").unwrap().clone(),
-            }
+            RvecTvec::new(result.get("rvec").unwrap(), result.get("tvec").unwrap())
         })
         .collect()
 }
@@ -579,8 +576,8 @@ pub fn calib_all_camera_with_extrinsics(
         let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
         let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
         if cam_idx > 0 {
-            initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].rvec.clone());
-            initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].tvec.clone());
+            initial_values.insert(rvec_i_0_name.clone(), t_cam_i_0[cam_idx].na_rvec());
+            initial_values.insert(tvec_i_0_name.clone(), t_cam_i_0[cam_idx].na_tvec());
         }
 
         for (&valid_frame_idx, rtvec) in &cam_rtvecs[cam_idx] {
@@ -628,10 +625,10 @@ pub fn calib_all_camera_with_extrinsics(
             if cam_idx == 0 {
                 initial_values
                     .entry(rvec_0_b_name)
-                    .or_insert(rtvec.rvec.clone());
+                    .or_insert(rtvec.na_rvec());
                 initial_values
                     .entry(tvec_0_b_name)
-                    .or_insert(rtvec.tvec.clone());
+                    .or_insert(rtvec.na_tvec());
             } else {
                 // 0 <- i <- board
                 let rtvec_0_b = (t_cam_i_0[cam_idx].to_na_isometry3().inverse()
@@ -639,10 +636,10 @@ pub fn calib_all_camera_with_extrinsics(
                 .to_rvec_tvec();
                 initial_values
                     .entry(rvec_0_b_name)
-                    .or_insert(rtvec_0_b.rvec);
+                    .or_insert(rtvec_0_b.na_rvec());
                 initial_values
                     .entry(tvec_0_b_name)
-                    .or_insert(rtvec_0_b.tvec);
+                    .or_insert(rtvec_0_b.na_tvec());
             }
         }
 
@@ -678,17 +675,14 @@ pub fn calib_all_camera_with_extrinsics(
             calibrated_camera.set_params(&new_params);
             result_intrinsics.push(calibrated_camera);
             let t_i_0 = if cam_idx == 0 {
-                RvecTvec {
-                    rvec: na::dvector![0.0, 0.0, 0.0],
-                    tvec: na::dvector![0.0, 0.0, 0.0],
-                }
+                RvecTvec::new(&na::dvector![0.0, 0.0, 0.0], &na::dvector![0.0, 0.0, 0.0])
             } else {
                 let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
                 let tvec_i_0_name = format!("tvec_{}_0", cam_idx);
-                RvecTvec {
-                    rvec: result.remove(&rvec_i_0_name).unwrap(),
-                    tvec: result.remove(&tvec_i_0_name).unwrap(),
-                }
+                RvecTvec::new(
+                    &result.remove(&rvec_i_0_name).unwrap(),
+                    &result.remove(&tvec_i_0_name).unwrap(),
+                )
             };
             result_t_i_0.push(t_i_0);
         }
@@ -699,10 +693,10 @@ pub fn calib_all_camera_with_extrinsics(
                 let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
                 (
                     valid_frame_idx,
-                    RvecTvec {
-                        rvec: result.remove(&rvec_0_b_name).unwrap(),
-                        tvec: result.remove(&tvec_0_b_name).unwrap(),
-                    },
+                    RvecTvec::new(
+                        &result.remove(&rvec_0_b_name).unwrap(),
+                        &result.remove(&tvec_0_b_name).unwrap(),
+                    ),
                 )
             })
             .collect();
@@ -723,7 +717,7 @@ pub fn validation(
         .iter()
         .map(|(&i, rtvec)| {
             let f = detected_feature_frames[i].clone().unwrap();
-            let transform = na::Isometry3::new(rtvec.tvec.to_vec3(), rtvec.rvec.to_vec3());
+            let transform = rtvec.to_na_isometry3();
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
                 .features
                 .values()
@@ -765,63 +759,6 @@ pub fn validation(
             (f.time_ns, reprojection, p2ds)
         })
         .collect();
-    // detected_feature_frames
-    //     .iter()
-    //     .filter_map(|f| f.clone())
-    //     .enumerate()
-    //     .map(|(i, f)| {
-    //         let tvec = na::Vector3::new(
-    //             rtvec_list[i].tvec[0],
-    //             rtvec_list[i].tvec[1],
-    //             rtvec_list[i].tvec[2],
-    //         );
-    //         let rvec = na::Vector3::new(
-    //             rtvec_list[i].rvec[0],
-    //             rtvec_list[i].rvec[1],
-    //             rtvec_list[i].rvec[2],
-    //         );
-    //         let transform = na::Isometry3::new(tvec, rvec);
-    //         let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
-    //             .features
-    //             .values()
-    //             .map(|feature| {
-    //                 let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
-    //                 let p3p = transform * p3.cast();
-    //                 let p3p = na::Vector3::new(p3p.x, p3p.y, p3p.z);
-    //                 let p2p = final_result.project_one(&p3p);
-    //                 let dx = p2p.x - feature.p2d.x as f64;
-    //                 let dy = p2p.y - feature.p2d.y as f64;
-    //                 ((dx * dx + dy * dy).sqrt(), (feature.p2d.x, feature.p2d.y))
-    //             })
-    //             .unzip();
-    //         if let Some(recording) = recording_option {
-    //             let p3p_rerun: Vec<_> = f
-    //                 .features
-    //                 .values()
-    //                 .map(|feature| {
-    //                     let p3 = na::Point3::new(feature.p3d.x, feature.p3d.y, feature.p3d.z);
-    //                     let p3p = transform.cast() * p3;
-    //                     (p3p.x, p3p.y, p3p.z)
-    //                 })
-    //                 .collect();
-    //             recording.set_time_nanos("stable", f.time_ns);
-    //             recording
-    //                 .log("/board", &rerun::Points3D::new(p3p_rerun))
-    //                 .unwrap();
-    //             recording
-    //                 .log("/camera_coordinate", &rerun::Transform3D::IDENTITY)
-    //                 .unwrap();
-    //             let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
-    //             recording
-    //                 .log(
-    //                     "/board/reprojection_err",
-    //                     &rerun::TextLog::new(format!("{} px", avg_err)),
-    //                 )
-    //                 .unwrap();
-    //         };
-    //         (f.time_ns, reprojection, p2ds)
-    //     })
-    //     .collect();
     let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
         .iter()
         .flat_map(|f| f.1.clone())

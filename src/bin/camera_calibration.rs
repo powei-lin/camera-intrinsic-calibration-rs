@@ -6,7 +6,7 @@ use camera_intrinsic_calibration::board::{
 };
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::detected_points::FrameFeature;
-use camera_intrinsic_calibration::types::RvecTvec;
+use camera_intrinsic_calibration::types::{extrinsics_to_json, Extrinsics, RvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
@@ -269,7 +269,7 @@ fn main() {
         .collect();
     let t_cam_i_0 = init_camera_extrinsic(&cam_rtvecs, &recording, &times);
     for t in &t_cam_i_0 {
-        println!("r {} t {}", t.rvec, t.tvec);
+        println!("r {} t {}", t.na_rvec(), t.na_tvec());
     }
     if let Some((camera_intrinsics, t_i_0, board_rtvecs)) = calib_all_camera_with_extrinsics(
         &calibrated_intrinsics,
@@ -286,5 +286,9 @@ fn main() {
                 &intrinsic,
             );
         }
+        extrinsics_to_json(
+            &format!("{}/extrinsics.json", output_folder),
+            &Extrinsics::new(&t_i_0),
+        );
     }
 }

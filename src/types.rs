@@ -1,16 +1,49 @@
+use std::io::Write;
+
 use nalgebra as na;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RvecTvec {
-    pub rvec: na::DVector<f64>,
-    pub tvec: na::DVector<f64>,
+    rvec: (f64, f64, f64),
+    tvec: (f64, f64, f64),
 }
 
 impl RvecTvec {
-    pub fn new(rvec: na::DVector<f64>, tvec: na::DVector<f64>) -> RvecTvec {
-        RvecTvec { rvec, tvec }
+    pub fn new(rvec: &na::DVector<f64>, tvec: &na::DVector<f64>) -> RvecTvec {
+        RvecTvec {
+            rvec: (rvec[0], rvec[1], rvec[2]),
+            tvec: (tvec[0], tvec[1], tvec[2]),
+        }
     }
     pub fn to_na_isometry3(&self) -> na::Isometry3<f64> {
-        na::Isometry3::new(self.tvec.to_vec3(), self.rvec.to_vec3())
+        na::Isometry3::new(self.na_tvec().to_vec3(), self.na_rvec().to_vec3())
     }
+    pub fn na_rvec(&self) -> na::DVector<f64> {
+        na::dvector![self.rvec.0, self.rvec.1, self.rvec.2]
+    }
+    pub fn na_tvec(&self) -> na::DVector<f64> {
+        na::dvector![self.tvec.0, self.tvec.1, self.tvec.2]
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Extrinsics {
+    rtvecs: Vec<RvecTvec>,
+}
+
+impl Extrinsics {
+    pub fn new(rtvecs: &[RvecTvec]) -> Extrinsics {
+        Extrinsics {
+            rtvecs: rtvecs.to_vec(),
+        }
+    }
+}
+
+pub fn extrinsics_to_json(output_path: &str, extrinsic: &Extrinsics) {
+    let j = serde_json::to_string_pretty(extrinsic).unwrap();
+    let mut file = std::fs::File::create(output_path).unwrap();
+    file.write_all(j.as_bytes()).unwrap();
 }
 
 pub trait ToRvecTvec {
@@ -20,7 +53,7 @@ impl ToRvecTvec for na::Isometry3<f64> {
     fn to_rvec_tvec(&self) -> RvecTvec {
         let rvec = self.rotation.scaled_axis().to_dvec();
         let tvec = na::dvector![self.translation.x, self.translation.y, self.translation.z,];
-        RvecTvec { rvec, tvec }
+        RvecTvec::new(&rvec, &tvec)
     }
 }
 
