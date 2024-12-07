@@ -1,4 +1,3 @@
-use std::io::Write;
 
 use nalgebra as na;
 use serde::{Deserialize, Serialize};

@@ -13,7 +13,6 @@ use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
-use rerun::RecordingStream;
 use std::collections::HashMap;
 use std::time::Instant;
 use time::OffsetDateTime;
@@ -188,7 +187,7 @@ fn main() {
         for (cam_idx, intrinsic) in camera_intrinsics.iter().enumerate() {
             model_to_json(
                 &format!("{}/cam{}.json", output_folder, cam_idx),
-                &intrinsic,
+                intrinsic,
             );
             let new_rtvec_map: HashMap<usize, RvecTvec> = board_rtvecs
                 .iter()
@@ -245,7 +244,7 @@ fn main() {
             );
             model_to_json(
                 &format!("{}/cam{}.json", output_folder, cam_idx),
-                &intrinsic,
+                intrinsic,
             );
         }
         write_report(&format!("{}/report.txt", output_folder), false, &rep_rms);

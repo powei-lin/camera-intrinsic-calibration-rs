@@ -7,7 +7,7 @@ use crate::types::{RvecTvec, ToRvecTvec};
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
-use super::types::{DVecVec3, Vec3DVec};
+use super::types::Vec3DVec;
 use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
@@ -695,9 +695,7 @@ pub fn validation(
     let time_reprojection_errors_p2ds: Vec<_> = rtvec_list
         .iter()
         .filter_map(|(&i, rtvec)| {
-            if detected_feature_frames[i].is_none() {
-                return None;
-            }
+            detected_feature_frames[i].as_ref()?;
             let f = detected_feature_frames[i].clone().unwrap();
             let transform = rtvec.to_na_isometry3();
             let (reprojection, p2ds): (Vec<_>, Vec<_>) = f
