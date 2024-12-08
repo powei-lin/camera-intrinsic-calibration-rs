@@ -37,20 +37,28 @@ rerun results/20YYMMDD_HH_MM_SS/logging.rrd
     ```
     dataset_root
     └── mav0
-        └── cam0
-            ├── data
-            │   ├── {time_stamp}.png
-            │   ├── {time_stamp}.png
-            │   └── {time_stamp}.png
-            └── data.csv
+        ├── cam0
+        │   └── data
+        │       ├── {time_stamp}.png
+        │       ├── {time_stamp}.png
+        │       └── {time_stamp}.png
+        └── cam1
+            └── data
+                ├── {time_stamp}.png
+                ├── {time_stamp}.png
+                └── {time_stamp}.png
     ```
 * General `--dataset-format general`
     ```
     dataset_root
-    └── cam0
-        ├── any_file_name.png
-        ├── any_file_name.png
-        └── any_file_name.png
+    ├── cam0
+    │   ├── any_file_name.png
+    │   ├── any_file_name.png
+    │   └── any_file_name.png
+    └── cam1
+        ├── any_file_name.png
+        ├── any_file_name.png
+        └── any_file_name.png
     ```
 ### Camera models
 * Extended Unified (EUCM)
