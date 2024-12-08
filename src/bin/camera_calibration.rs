@@ -7,7 +7,7 @@ use camera_intrinsic_calibration::board::{
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::detected_points::FrameFeature;
 use camera_intrinsic_calibration::io::{extrinsics_to_json, write_report};
-use camera_intrinsic_calibration::types::{Extrinsics, RvecTvec, ToRvecTvec};
+use camera_intrinsic_calibration::types::{CalibParams, Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
@@ -146,15 +146,19 @@ fn main() {
             let mut calibrated_result: Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> = None;
             let max_trials = 3;
             let cam0_fixed_focal = if cam_idx == 0 { cli.fixed_focal } else { None };
-            for _ in 0..max_trials {
+            let calib_params = CalibParams {
+                fixed_focal: cam0_fixed_focal,
+                disabled_distortion_num: cli.disabled_distortion_num,
+                one_focal: cli.one_focal,
+            };
+            for trial in 0..max_trials {
                 calibrated_result = init_and_calibrate_one_camera(
                     cam_idx,
                     &cams_detected_feature_frames,
                     &cli.model,
                     &recording,
-                    cam0_fixed_focal,
-                    cli.disabled_distortion_num,
-                    cli.one_focal,
+                    &calib_params,
+                    trial > 0,
                 );
                 if calibrated_result.is_some() {
                     break;

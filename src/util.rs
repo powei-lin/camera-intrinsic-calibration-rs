@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::detected_points::{FeaturePoint, FrameFeature};
 use crate::optimization::{homography_to_focal, init_pose, radial_distortion_homography};
-use crate::types::{Intrinsics, RvecTvec, ToRvecTvec};
+use crate::types::{CalibParams, Intrinsics, RvecTvec, ToRvecTvec};
 use crate::visualization::rerun_shift;
 
 use super::optimization::factors::*;
@@ -11,6 +11,7 @@ use super::types::Vec3DVec;
 use camera_intrinsic_model::*;
 use log::debug;
 use nalgebra as na;
+use rand::seq::SliceRandom;
 use rerun::RecordingStream;
 use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
@@ -148,7 +149,10 @@ pub fn try_init_camera(
     }
 }
 
-pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) -> (usize, usize) {
+pub fn find_best_two_frames_idx(
+    detected_feature_frames: &[Option<FrameFeature>],
+    random_pick: bool,
+) -> (usize, usize) {
     let mut max_detection = 0;
     let mut max_detection_idxs = Vec::new();
     for (i, f) in detected_feature_frames.iter().enumerate() {
@@ -164,6 +168,11 @@ pub fn find_best_two_frames(detected_feature_frames: &[Option<FrameFeature>]) ->
                 }
             }
         }
+    }
+    if random_pick {
+        let mut rng = rand::thread_rng();
+        max_detection_idxs.shuffle(&mut rng);
+        return (max_detection_idxs[0], max_detection_idxs[1]);
     }
     let mut v0: Vec<_> = max_detection_idxs
         .iter()
@@ -787,11 +796,16 @@ pub fn init_and_calibrate_one_camera(
     cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
     target_model: &GenericModel<f64>,
     recording: &RecordingStream,
-    fixed_focal: Option<f64>,
-    disabled_distortion_num: usize,
-    one_focal: bool,
+    calib_params: &CalibParams,
+    // fixed_focal: Option<f64>,
+    // disabled_distortion_num: usize,
+    // one_focal: bool,
+    random_pick_two_frame: bool,
 ) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
-    let (frame0, frame1) = find_best_two_frames(&cams_detected_feature_frames[cam_idx]);
+    let (frame0, frame1) = find_best_two_frames_idx(
+        &cams_detected_feature_frames[cam_idx],
+        random_pick_two_frame,
+    );
 
     let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0]
         .clone()
@@ -800,19 +814,11 @@ pub fn init_and_calibrate_one_camera(
         .clone()
         .unwrap();
 
-    let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
-    key_frames.iter().enumerate().for_each(|(i, k)| {
-        let topic = format!("/cam{}/keyframe{}", cam_idx, i);
-        recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
-        recording
-            .log(topic, &rerun::TextLog::new("keyframe"))
-            .unwrap();
-    });
-
     let mut initial_camera = GenericModel::UCM(UCM::zeros());
     for i in 0..10 {
         log::trace!("Initialize ucm {}", i);
-        if let Some(initialized_ucm) = try_init_camera(frame_feature0, frame_feature1, fixed_focal)
+        if let Some(initialized_ucm) =
+            try_init_camera(frame_feature0, frame_feature1, calib_params.fixed_focal)
         {
             initial_camera = initialized_ucm;
             break;
@@ -827,9 +833,13 @@ pub fn init_and_calibrate_one_camera(
         initial_camera.width().round() as u32,
         initial_camera.height().round() as u32,
     );
-    convert_model(&initial_camera, &mut final_model, disabled_distortion_num);
+    convert_model(
+        &initial_camera,
+        &mut final_model,
+        calib_params.disabled_distortion_num,
+    );
     println!("Converted {:?}", final_model);
-    let (one_focal, fixed_focal) = if let Some(focal) = fixed_focal {
+    let (one_focal, fixed_focal) = if let Some(focal) = calib_params.fixed_focal {
         // if fixed focal then set one focal true
         let mut p = final_model.params();
         p[0] = focal;
@@ -837,14 +847,25 @@ pub fn init_and_calibrate_one_camera(
         final_model.set_params(&p);
         (true, true)
     } else {
-        (one_focal, false)
+        (calib_params.one_focal, false)
     };
 
-    calib_camera(
+    let calib_result = calib_camera(
         &cams_detected_feature_frames[cam_idx],
         &final_model,
         one_focal,
-        disabled_distortion_num,
+        calib_params.disabled_distortion_num,
         fixed_focal,
-    )
+    );
+    if calib_result.is_some() {
+        let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
+        key_frames.iter().enumerate().for_each(|(i, k)| {
+            let topic = format!("/cam{}/keyframe{}", cam_idx, i);
+            recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
+            recording
+                .log(topic, &rerun::TextLog::new("keyframe"))
+                .unwrap();
+        });
+    }
+    calib_result
 }

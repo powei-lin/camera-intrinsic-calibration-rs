@@ -2,6 +2,12 @@ use camera_intrinsic_model::GenericModel;
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
+pub struct CalibParams {
+    pub fixed_focal: Option<f64>,
+    pub disabled_distortion_num: usize,
+    pub one_focal: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RvecTvec {
     rvec: (f64, f64, f64),
