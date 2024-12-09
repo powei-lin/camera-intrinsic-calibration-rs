@@ -8,6 +8,7 @@ use aprilgrid::detector::TagDetector;
 use glam::Vec2;
 use glob::glob;
 use image::{DynamicImage, ImageReader};
+use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 
 const MIN_CORNERS: usize = 24;
@@ -74,14 +75,17 @@ pub fn load_euroc(
             let img_paths =
                 glob(format!("{}/mav0/cam{}/data/*.png", root_folder, cam_idx).as_str())
                     .expect("failed");
-            let mut time_frame: Vec<_> = img_paths
-                .skip(start_idx)
-                .step_by(step)
+            let mut sorted_path: Vec<_> = img_paths.collect();
+            sorted_path.sort_by(|a, b| a.as_ref().unwrap().cmp(b.as_ref().unwrap()));
+            let new_paths: Vec<_> = sorted_path.iter().skip(start_idx).step_by(step).collect();
+            let mut time_frame: Vec<_> = new_paths
+                .iter()
                 .par_bridge()
+                .progress_count(new_paths.len() as u64)
                 .map(|path| {
-                    let path = path.unwrap();
-                    let time_ns = path_to_timestamp(&path);
-                    let img = ImageReader::open(&path).unwrap().decode().unwrap();
+                    let path = path.as_ref().unwrap();
+                    let time_ns = path_to_timestamp(path);
+                    let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
                         recording.set_time_nanos("stable", time_ns);
                         let topic = format!("/cam{}", cam_idx);
@@ -119,15 +123,22 @@ pub fn load_others(
             let img_paths = glob(format!("{}/**/cam{}/**/*.png", root_folder, cam_idx).as_str())
                 .expect("failed");
             log::trace!("loading cam{}", cam_idx);
-            let mut time_frame: Vec<_> = img_paths
+            let mut sorted_path: Vec<_> = img_paths.collect();
+            sorted_path.sort_by(|a, b| a.as_ref().unwrap().cmp(b.as_ref().unwrap()));
+            let new_paths: Vec<_> = sorted_path
+                .iter()
                 .skip(start_idx)
                 .step_by(step)
                 .enumerate()
+                .collect();
+            let mut time_frame: Vec<_> = new_paths
+                .iter()
                 .par_bridge()
+                .progress_count(new_paths.len() as u64)
                 .map(|(idx, path)| {
-                    let path = path.unwrap();
-                    let time_ns = idx as i64 * 100000000;
-                    let img = ImageReader::open(&path).unwrap().decode().unwrap();
+                    let path = path.as_ref().unwrap();
+                    let time_ns = *idx as i64 * 100000000;
+                    let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
                         recording.set_time_nanos("stable", time_ns);
                         let topic = format!("/cam{}", cam_idx);
