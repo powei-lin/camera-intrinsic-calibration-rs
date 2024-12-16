@@ -228,7 +228,7 @@ pub fn convert_model(
     let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, steps as usize);
     problem.add_residual_block(
         cost.residaul_num(),
-        vec![("params".to_string(), target_model.params().len())],
+        &[("params", target_model.params().len())],
         Box::new(cost),
         Some(Box::new(HuberLoss::new(1.0))),
     );
@@ -286,11 +286,7 @@ pub fn init_ucm(
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
-            vec![
-                ("params".to_string(), 2),
-                ("rvec0".to_string(), 3),
-                ("tvec0".to_string(), 3),
-            ],
+            &[("params", 2), ("rvec0", 3), ("tvec0", 3)],
             Box::new(cost),
             Some(Box::new(HuberLoss::new(1.0))),
         );
@@ -300,11 +296,7 @@ pub fn init_ucm(
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
-            vec![
-                ("params".to_string(), 2),
-                ("rvec1".to_string(), 3),
-                ("tvec1".to_string(), 3),
-            ],
+            &[("params", 2), ("rvec1", 3), ("tvec1", 3)],
             Box::new(cost),
             Some(Box::new(HuberLoss::new(1.0))),
         );
@@ -390,11 +382,7 @@ pub fn calib_camera(
                 let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                 problem.add_residual_block(
                     2,
-                    vec![
-                        ("params".to_string(), params_len),
-                        (rvec_name.clone(), 3),
-                        (tvec_name.clone(), 3),
-                    ],
+                    &[("params", params_len), (&rvec_name, 3), (&tvec_name, 3)],
                     Box::new(cost),
                     Some(Box::new(HuberLoss::new(1.0))),
                 );
@@ -509,7 +497,7 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
                 let cost = SE3Factor::new(t_0_b, t_i_b);
                 problem.add_residual_block(
                     6,
-                    vec![("rvec".to_string(), 3), ("tvec".to_string(), 3)],
+                    &[("rvec", 3), ("tvec", 3)],
                     Box::new(cost),
                     Some(Box::new(HuberLoss::new(0.5))),
                 );
@@ -577,10 +565,10 @@ pub fn calib_all_camera_with_extrinsics(
                         ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                     problem.add_residual_block(
                         2,
-                        vec![
-                            (params_name.clone(), params_len),
-                            (rvec_0_b_name.clone(), 3),
-                            (tvec_0_b_name.clone(), 3),
+                        &[
+                            (&params_name, params_len),
+                            (&rvec_0_b_name, 3),
+                            (&tvec_0_b_name, 3),
                         ],
                         Box::new(cost),
                         Some(Box::new(HuberLoss::new(1.0))),
@@ -594,12 +582,12 @@ pub fn calib_all_camera_with_extrinsics(
                     );
                     problem.add_residual_block(
                         2,
-                        vec![
-                            (params_name.clone(), params_len),
-                            (rvec_0_b_name.clone(), 3),
-                            (tvec_0_b_name.clone(), 3),
-                            (rvec_i_0_name.clone(), 3),
-                            (tvec_i_0_name.clone(), 3),
+                        &[
+                            (&params_name, params_len),
+                            (&rvec_0_b_name, 3),
+                            (&tvec_0_b_name, 3),
+                            (&rvec_i_0_name, 3),
+                            (&tvec_i_0_name, 3),
                         ],
                         Box::new(cost),
                         Some(Box::new(HuberLoss::new(1.0))),
