@@ -1,4 +1,4 @@
-use faer::solvers::SpSolverLstsq;
+use faer::prelude::SpSolverLstsq;
 use log::debug;
 use nalgebra as na;
 use rand::seq::SliceRandom;
