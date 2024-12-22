@@ -1,6 +1,6 @@
 [package]
 name = "camera-intrinsic-calibration"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 authors = ["Powei Lin <poweilin1994@gmail.com>"]
 readme = "README.md"
@@ -10,7 +10,15 @@ homepage = "https://github.com/powei-lin/camera-intrinsic"
 repository = "https://github.com/powei-lin/camera-intrinsic"
 keywords = ["camera-intrinsic", "intrinsic", "fisheye"]
 categories = ["data-structures", "science", "mathematics", "science::robotics"]
-exclude = ["/.github/*", "*.ipynb", "./scripts/*", "examples/*", "tests/*", "./data/*"]
+exclude = [
+    "/.github/*",
+    "*.ipynb",
+    "scripts/*",
+    "examples/*",
+    "tests/*",
+    "data/*",
+    "docs/*",
+]
 
 [dependencies]
 aprilgrid = "0.4.3"
