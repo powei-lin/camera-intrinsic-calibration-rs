@@ -1,6 +1,6 @@
 [package]
 name = "camera-intrinsic-calibration"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 authors = ["Powei Lin <poweilin1994@gmail.com>"]
 readme = "README.md"
@@ -21,7 +21,7 @@ exclude = [
 ]
 
 [dependencies]
-aprilgrid = "0.4.3"
+aprilgrid = "0.5.1"
 camera-intrinsic-model = "0.3.1"
 clap = { version = "4.5.23", features = ["derive"] }
 colorous = "1.0.15"
@@ -38,10 +38,10 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rerun = "0.17.0"
 serde = { version = "1.0.216", features = ["derive"] }
-serde_json = "1.0.133"
+serde_json = "1.0.134"
 sqpnp_simple = "0.1.5"
 time = "0.3.37"
-tiny-solver = "0.12.1"
+tiny-solver = "0.13.0"
 
 [[bin]]
 name = "ccrs"
