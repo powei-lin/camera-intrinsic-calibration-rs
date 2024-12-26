@@ -241,7 +241,7 @@ pub fn convert_model(
         HashMap::<String, na::DVector<f64>>::from([("params".to_string(), target_params_init)]);
 
     // initialize optimizer
-    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    let optimizer = tiny_solver::LevenbergMarquardtOptimizer::default();
 
     // distortion parameter bound
     set_problem_parameter_bound("params", &mut problem, target_model, false);
@@ -311,7 +311,7 @@ pub fn init_ucm(
     ]);
 
     // initialize optimizer
-    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    let optimizer = tiny_solver::LevenbergMarquardtOptimizer::default();
     if fixed_focal {
         init_focal_alpha_problem.fix_variable("params", 0);
     }
@@ -407,7 +407,7 @@ pub fn calib_camera(
         }
     }
 
-    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    let optimizer = tiny_solver::LevenbergMarquardtOptimizer::default();
     // let initial_values = optimizer.optimize(&problem, &initial_values, None);
 
     set_problem_parameter_bound("params", &mut problem, generic_camera, xy_same_focal);
@@ -513,7 +513,7 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
                 ("tvec".to_string(), tvec),
             ]);
 
-            let optimizer = tiny_solver::GaussNewtonOptimizer {};
+            let optimizer = tiny_solver::LevenbergMarquardtOptimizer::default();
             let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
             println!("extrinsic cam{} cam0", cam_i);
             println!("rvec: {}", result["rvec"]);
@@ -629,7 +629,7 @@ pub fn calib_all_camera_with_extrinsics(
         println!("set focal");
         problem.fix_variable("params0", 0);
     }
-    let optimizer = tiny_solver::GaussNewtonOptimizer {};
+    let optimizer = tiny_solver::LevenbergMarquardtOptimizer::default();
 
     let result_option = optimizer.optimize(&problem, &initial_values, None);
     if let Some(mut result) = result_option {
