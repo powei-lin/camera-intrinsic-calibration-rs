@@ -228,7 +228,7 @@ pub fn convert_model(
     let cost = ModelConvertFactor::new(source_model, target_model, edge_pixels, steps as usize);
     problem.add_residual_block(
         cost.residaul_num(),
-        &[("params", target_model.params().len())],
+        &["params"],
         Box::new(cost),
         Some(Box::new(HuberLoss::new(1.0))),
     );
@@ -286,7 +286,7 @@ pub fn init_ucm(
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
-            &[("params", 2), ("rvec0", 3), ("tvec0", 3)],
+            &["params", "rvec0", "tvec0"],
             Box::new(cost),
             Some(Box::new(HuberLoss::new(1.0))),
         );
@@ -296,7 +296,7 @@ pub fn init_ucm(
         let cost = UCMInitFocalAlphaFactor::new(&ucm_init_model, &fp.p3d, &fp.p2d);
         init_focal_alpha_problem.add_residual_block(
             2,
-            &[("params", 2), ("rvec1", 3), ("tvec1", 3)],
+            &["params", "rvec1", "tvec1"],
             Box::new(cost),
             Some(Box::new(HuberLoss::new(1.0))),
         );
@@ -366,7 +366,6 @@ pub fn calib_camera(
         // remove fy
         params = params.remove_row(1);
     };
-    let params_len = params.len();
     let mut initial_values =
         HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)]);
     debug!("init {:?}", initial_values);
@@ -382,7 +381,7 @@ pub fn calib_camera(
                 let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                 problem.add_residual_block(
                     2,
-                    &[("params", params_len), (&rvec_name, 3), (&tvec_name, 3)],
+                    &["params", &rvec_name, &tvec_name],
                     Box::new(cost),
                     Some(Box::new(HuberLoss::new(1.0))),
                 );
@@ -497,7 +496,7 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
                 let cost = SE3Factor::new(t_0_b, t_i_b);
                 problem.add_residual_block(
                     6,
-                    &[("rvec", 3), ("tvec", 3)],
+                    &["rvec", "tvec"],
                     Box::new(cost),
                     Some(Box::new(HuberLoss::new(0.5))),
                 );
@@ -542,7 +541,6 @@ pub fn calib_all_camera_with_extrinsics(
             // remove fy
             params = params.remove_row(1);
         };
-        let params_len = params.len();
         initial_values.insert(params_name.clone(), params);
 
         let rvec_i_0_name = format!("rvec_{}_0", cam_idx);
@@ -565,11 +563,7 @@ pub fn calib_all_camera_with_extrinsics(
                         ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                     problem.add_residual_block(
                         2,
-                        &[
-                            (&params_name, params_len),
-                            (&rvec_0_b_name, 3),
-                            (&tvec_0_b_name, 3),
-                        ],
+                        &[&params_name, &rvec_0_b_name, &tvec_0_b_name],
                         Box::new(cost),
                         Some(Box::new(HuberLoss::new(1.0))),
                     );
@@ -583,11 +577,11 @@ pub fn calib_all_camera_with_extrinsics(
                     problem.add_residual_block(
                         2,
                         &[
-                            (&params_name, params_len),
-                            (&rvec_0_b_name, 3),
-                            (&tvec_0_b_name, 3),
-                            (&rvec_i_0_name, 3),
-                            (&tvec_i_0_name, 3),
+                            &params_name,
+                            &rvec_0_b_name,
+                            &tvec_0_b_name,
+                            &rvec_i_0_name,
+                            &tvec_i_0_name,
                         ],
                         Box::new(cost),
                         Some(Box::new(HuberLoss::new(1.0))),
