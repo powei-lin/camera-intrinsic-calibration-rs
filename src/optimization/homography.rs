@@ -210,7 +210,7 @@ pub fn radial_distortion_homography(
         })
         .collect();
     let ransac_times = 1000;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let mut best_lambda = 0.0;
     let mut best_homography_mat = na::Matrix3::zeros();

@@ -170,7 +170,7 @@ pub fn find_best_two_frames_idx(
         }
     }
     if random_pick {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         max_detection_idxs.shuffle(&mut rng);
         return (max_detection_idxs[0], max_detection_idxs[1]);
     }

@@ -28,7 +28,7 @@ pub fn log_image_as_compressed(
 
 pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {
     let mut rng = ChaCha8Rng::seed_from_u64(id as u64);
-    let color_num = rng.gen_range(0..2u32.pow(24));
+    let color_num = rng.random_range(0..2u32.pow(24));
     (
         ((color_num >> 16) % 256) as u8,
         ((color_num >> 8) % 256) as u8,

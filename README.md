@@ -60,6 +60,7 @@ rerun results/20YYMMDD_HH_MM_SS/logging.rrd
         ├── any_file_name.png
         └── any_file_name.png
     ```
+    Images can be either `.png` or `.jpg`, but `.png` is preferred if possible. PNG is lossless compression, while JPG is not.
 ### Camera models
 * Extended Unified (EUCM)
 * Extended Unified with Tangential (EUCMT)
