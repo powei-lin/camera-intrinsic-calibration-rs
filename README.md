@@ -9,7 +9,7 @@ A pure rust camera intrinsic calibration library.
 ```sh
 # cargo install cli
 cargo install camera-intrinsic-calibration
-# pip install cli
+# Or pip install cli
 pip install camera-intrinsic-calibration
 ```
 Or download from the latest [release](https://github.com/powei-lin/camera-intrinsic-calibration-rs/releases).
