@@ -1,12 +1,16 @@
 # camera-intrinsic-calibration
 [![crate](https://img.shields.io/crates/v/camera-intrinsic-calibration.svg)](https://crates.io/crates/camera-intrinsic-calibration)
+[![PyPI - Version](https://img.shields.io/pypi/v/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
 
 A pure rust camera intrinsic calibration library.
 
 ## Installation
 ```sh
-# install cli
+# cargo install cli
 cargo install camera-intrinsic-calibration
+# pip install cli
+pip install camera-intrinsic-calibration
 ```
 Or download from the latest [release](https://github.com/powei-lin/camera-intrinsic-calibration-rs/releases).
 
@@ -26,7 +30,11 @@ ccrs dataset-calib-cam1_1024_16 --model eucm
 ```
 ### Visualize details after calibration
 ```sh
+# use cargo to install rerun
 cargo install rerun-cli --version 0.17.0
+# or use pip to install rerun
+pip install rerun-sdk==0.17.0
+# visualize result
 rerun results/20YYMMDD_HH_MM_SS/logging.rrd
 ```
 <img src="data/rerun_logs.jpg" width="800" alt="example detection">
