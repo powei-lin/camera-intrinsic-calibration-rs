@@ -346,7 +346,7 @@ pub fn init_ucm(
                 0,
                 fixed_focal,
             )
-            .unwrap()
+            .expect("The initial UCM model fitting failed. Might be wrong board configuration.")
             .0,
         )
     } else {
