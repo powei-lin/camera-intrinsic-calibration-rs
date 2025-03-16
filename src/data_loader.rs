@@ -88,7 +88,7 @@ pub fn load_euroc(
             let mut sorted_path: Vec<std::path::PathBuf> =
                 img_paths.into_iter().filter_map(img_filter).collect();
 
-            sorted_path.sort_by(|a, b| a.cmp(b));
+            sorted_path.sort();
             let new_paths: Vec<_> = sorted_path.iter().skip(start_idx).step_by(step).collect();
             let mut time_frame: Vec<_> = new_paths
                 .iter()
@@ -137,7 +137,7 @@ pub fn load_others(
             let mut sorted_path: Vec<std::path::PathBuf> =
                 img_paths.into_iter().filter_map(img_filter).collect();
 
-            sorted_path.sort_by(|a, b| a.cmp(b));
+            sorted_path.sort();
             let new_paths: Vec<_> = sorted_path
                 .iter()
                 .skip(start_idx)
