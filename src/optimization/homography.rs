@@ -1,4 +1,4 @@
-use faer::prelude::SpSolverLstsq;
+use faer::linalg::solvers::SolveLstsqCore;
 use log::debug;
 use nalgebra as na;
 use rand::seq::SliceRandom;
@@ -13,18 +13,18 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         let x_p = pt1.x;
         let y_p = pt1.y;
         unsafe {
-            m1.write_unchecked(r, 0, -x * y_p);
-            m1.write_unchecked(r, 1, -y * y_p);
-            m1.write_unchecked(r, 2, -y_p);
-            m1.write_unchecked(r, 3, x * x_p);
-            m1.write_unchecked(r, 4, x_p * y);
-            m1.write_unchecked(r, 5, x_p);
-            m1.write_unchecked(r, 6, -x * x * y_p - y * y * y_p);
-            m1.write_unchecked(r, 7, x * x * x_p + x_p * y * y);
+            *m1.get_mut_unchecked(r, 0) = -x * y_p;
+            *m1.get_mut_unchecked(r, 1) = -y * y_p;
+            *m1.get_mut_unchecked(r, 2) = -y_p;
+            *m1.get_mut_unchecked(r, 3) = x * x_p;
+            *m1.get_mut_unchecked(r, 4) = x_p * y;
+            *m1.get_mut_unchecked(r, 5) = x_p;
+            *m1.get_mut_unchecked(r, 6) = -x * x * y_p - y * y * y_p;
+            *m1.get_mut_unchecked(r, 7) = x * x * x_p + x_p * y * y;
         }
     }
     // let q_mat = mm1.transpose().qr().q();
-    let q_mat = m1.transpose().qr().compute_q();
+    let q_mat = m1.transpose().qr().compute_Q();
     let q_mat_t = q_mat.transpose();
     let n = q_mat_t.subrows(6, 2);
     let n02 = *n.get(0, 2);
@@ -62,7 +62,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
     for which_gamma in 0..2 {
         let gamma = g_result[which_gamma];
         let l = -(gamma * n06 + n16) / (-gamma * n02 - n12);
-        let v1 = gamma * n.row(0) + n.row(1);
+        let v1 = faer::Scale(gamma) * n.row(0) + n.row(1);
         temp_h[which_gamma][(0, 0)] = *v1.get(0);
         temp_h[which_gamma][(0, 1)] = *v1.get(1);
         temp_h[which_gamma][(0, 2)] = *v1.get(2);
@@ -79,12 +79,10 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
             let x_p = pt1.x;
             let y_p = pt1.y;
             unsafe {
-                eq10a.write_unchecked(row, 0, -x * x_p);
-                eq10a.write_unchecked(row, 1, -x_p * y);
-                eq10a.write_unchecked(row, 2, -l * x * x * x_p - l * x_p * y * y - x_p);
-                eq10a.write_unchecked(
-                    row,
-                    3,
+                *eq10a.get_mut_unchecked(row, 0) = -x * x_p;
+                *eq10a.get_mut_unchecked(row, 1) = -x_p * y;
+                *eq10a.get_mut_unchecked(row, 2) = -l * x * x * x_p - l * x_p * y * y - x_p;
+                *eq10a.get_mut_unchecked(row, 3) =
                     l * x * x * x_p * x_p * temp_h[which_gamma][(0, 2)]
                         + l * x * x * y_p * y_p * temp_h[which_gamma][(0, 2)]
                         + l * x_p * x_p * y * y * temp_h[which_gamma][(0, 2)]
@@ -94,25 +92,21 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
                         + x_p * x_p * y * temp_h[which_gamma][(0, 1)]
                         + x_p * x_p * temp_h[which_gamma][(0, 2)]
                         + y * y_p * y_p * temp_h[which_gamma][(0, 1)]
-                        + y_p * y_p * temp_h[which_gamma][(0, 2)],
-                );
+                        + y_p * y_p * temp_h[which_gamma][(0, 2)];
 
-                eq10b.write_unchecked(
-                    row,
-                    0,
-                    -l * x * x * temp_h[which_gamma][(0, 2)]
-                        - l * y * y * temp_h[which_gamma][(0, 2)]
-                        - x * temp_h[which_gamma][(0, 0)]
-                        - y * temp_h[which_gamma][(0, 1)]
-                        - temp_h[which_gamma][(0, 2)],
-                );
+                *eq10b.get_mut_unchecked(row, 0) = -l * x * x * temp_h[which_gamma][(0, 2)]
+                    - l * y * y * temp_h[which_gamma][(0, 2)]
+                    - x * temp_h[which_gamma][(0, 0)]
+                    - y * temp_h[which_gamma][(0, 1)]
+                    - temp_h[which_gamma][(0, 2)];
             }
         }
         // std::cout << "svd\n";
-        let eq10x = eq10a.qr().solve_lstsq(eq10b);
-        // Eigen::JacobiSVD<Eigen::Matrix<float, 6, 4>> svd(
-        //     eq10A, Eigen::ComputeFullU | Eigen::ComputeFullV);
-        // Eigen::Matrix<float, 4, 1> eq10x = svd.solve(eq10b);
+        let mut eq10x = eq10b;
+        eq10a
+            .qr()
+            .solve_lstsq_in_place_with_conj(faer::Conj::No, eq10x.as_mut());
+
         temp_h[which_gamma][(2, 0)] = *eq10x.get(0, 0);
         temp_h[which_gamma][(2, 1)] = *eq10x.get(1, 0);
         temp_h[which_gamma][(2, 2)] = *eq10x.get(2, 0);
