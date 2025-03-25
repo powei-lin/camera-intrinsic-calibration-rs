@@ -82,6 +82,9 @@ rerun results/20YYMMDD_HH_MM_SS/logging.rrd
 cargo run -r --example convert_model
 ```
 
+## Calibrate your own camera
+Please follow the [tutorial](docs/tutorial.md).
+
 ## Acknowledgements
 Links:
 * https://cvg.cit.tum.de/data/datasets/visual-inertial-dataset
