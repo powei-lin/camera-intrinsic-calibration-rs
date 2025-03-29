@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::board::{self, Board};
 use crate::detected_points::{FeaturePoint, FrameFeature};
-use crate::visualization::log_image_as_compressed;
+use crate::visualization::log_image;
 use aprilgrid::detector::TagDetector;
 use glam::Vec2;
 use glob::glob;
@@ -99,8 +99,8 @@ pub fn load_euroc(
                     let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
                         recording.set_time_nanos("stable", time_ns);
-                        let topic = format!("/cam{}", cam_idx);
-                        log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
+                        let topic = format!("cam{}", cam_idx);
+                        log_image(recording, &topic, &img);
                     };
                     (
                         time_ns,
@@ -153,8 +153,8 @@ pub fn load_others(
                     let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
                         recording.set_time_nanos("stable", time_ns);
-                        let topic = format!("/cam{}", cam_idx);
-                        log_image_as_compressed(recording, &topic, &img, image::ImageFormat::Jpeg);
+                        let topic = format!("cam{}", cam_idx);
+                        log_image(recording, &topic, &img);
                     };
                     (
                         time_ns,

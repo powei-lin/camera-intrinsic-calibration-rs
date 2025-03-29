@@ -102,7 +102,7 @@ fn main() {
         .save(format!("{}/logging.rrd", output_folder))
         .unwrap();
     recording
-        .log_static("/", &rerun::ViewCoordinates::RDF)
+        .log_static("/", &rerun::ViewCoordinates::RDF())
         .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
@@ -199,11 +199,11 @@ fn main() {
                     )
                 })
                 .collect();
+            let cam_transform =
+                na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse())
+                    .with_axis_length(0.1);
             recording
-                .log_static(
-                    format!("/cam{}", cam_idx),
-                    &na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse()),
-                )
+                .log_static(format!("/cam{}", cam_idx), &cam_transform)
                 .unwrap();
             let rep = validation(
                 cam_idx,

@@ -2,27 +2,14 @@ use image::DynamicImage;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use rerun::RecordingStream;
-use std::io::Cursor;
 
 use crate::detected_points::FrameFeature;
 
-pub fn log_image_as_compressed(
-    recording: &RecordingStream,
-    topic: &str,
-    img: &DynamicImage,
-    format: image::ImageFormat,
-) {
-    let mut bytes: Vec<u8> = Vec::new();
-
-    img.to_luma8()
-        .write_to(&mut Cursor::new(&mut bytes), format)
-        .unwrap();
-
+pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
+    let gray_img = img.to_luma8();
+    let rr_image = rerun::Image::from_l8(gray_img.to_vec(), [gray_img.width(), gray_img.height()]);
     recording
-        .log(
-            format!("{}/image", topic),
-            &rerun::Image::from_file_contents(bytes, None).unwrap(),
-        )
+        .log(format!("{}/image", topic), &rr_image)
         .unwrap();
 }
 
