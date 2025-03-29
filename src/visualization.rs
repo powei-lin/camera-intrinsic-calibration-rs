@@ -21,7 +21,7 @@ pub fn log_image_as_compressed(
     recording
         .log(
             format!("{}/image", topic),
-            &rerun::Image::from_file_contents(bytes, None).unwrap(),
+            &rerun::EncodedImage::from_file_contents(bytes),
         )
         .unwrap();
 }

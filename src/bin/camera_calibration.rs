@@ -102,7 +102,7 @@ fn main() {
         .save(format!("{}/logging.rrd", output_folder))
         .unwrap();
     recording
-        .log_static("/", &rerun::ViewCoordinates::RDF)
+        .log_static("/", &rerun::ViewCoordinates::RDF())
         .unwrap();
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
