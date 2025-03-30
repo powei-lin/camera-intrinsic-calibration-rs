@@ -1,4 +1,4 @@
-name: Rust
+name: Basic check
 
 on:
   push:

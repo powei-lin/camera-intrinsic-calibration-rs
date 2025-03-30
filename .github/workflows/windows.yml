@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
-        run: cargo build --release --verbose
+      # - name: Build
+      #   run: cargo build --release --verbose
 
       - name: Build Python
         run: |
@@ -28,7 +28,9 @@ jobs:
           python3 -m maturin build -r
 
       - name: List
-        run: ls ./target/release
+        run: | 
+          ls ./target/release
+          ls ./target/wheels
 
       - name: Move the artifact
         run: |
