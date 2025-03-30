@@ -1,9 +1,11 @@
 # camera-intrinsic-calibration
 [![crate](https://img.shields.io/crates/v/camera-intrinsic-calibration.svg)](https://crates.io/crates/camera-intrinsic-calibration)
+[![crate downloads](https://img.shields.io/crates/d/camera-intrinsic-calibration)](https://crates.io/crates/camera-intrinsic-calibration)
+
 [![PyPI - Version](https://img.shields.io/pypi/v/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
 
-A pure rust camera intrinsic calibration library.
+A pure rust camera intrinsic calibration tool.
 
 ## Installation
 ```sh
