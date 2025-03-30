@@ -1,0 +1,49 @@
+name: windows-build
+
+on:
+  push:
+    branches:
+      - '**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    # necessary for windows
+    shell: bash
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --verbose
+
+      - name: Build Python
+        run: |
+          python3 -m pip install maturin
+          python3 -m maturin build -r
+
+      - name: List
+        run: | 
+          ls ./target/release
+          ls ./target/wheels
+
+      - name: Move the artifact
+        run: |
+          mkdir -p ./artifacts
+          7z a ccrs-x86_64-pc-windows-msvc.zip ./target/release/ccrs.exe
+          sha256sum ccrs-x86_64-pc-windows-msvc.zip > ccrs-x86_64-pc-windows-msvc.zip.sha256
+          mv ./target/wheels/*.whl .
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-ccrs-x86_64-pc-windows-msvc
+          path: |
+            *.zip
+            *.sha256
+            *.whl
