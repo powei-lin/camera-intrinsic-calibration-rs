@@ -10,6 +10,7 @@ use glob::glob;
 use image::{DynamicImage, ImageReader};
 use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
+use rerun::TimeCell;
 
 const MIN_CORNERS: usize = 24;
 
@@ -98,7 +99,10 @@ pub fn load_euroc(
                     let time_ns = path_to_timestamp(path);
                     let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
-                        recording.set_time_nanos("stable", time_ns);
+                        recording.set_time(
+                            "stable",
+                            TimeCell::from_timestamp_nanos_since_epoch(time_ns),
+                        );
                         let topic = format!("cam{}", cam_idx);
                         log_image(recording, &topic, &img);
                     };
@@ -152,7 +156,10 @@ pub fn load_others(
                     let time_ns = *idx as i64 * 100000000;
                     let img = ImageReader::open(path).unwrap().decode().unwrap();
                     if let Some(recording) = recording_option {
-                        recording.set_time_nanos("stable", time_ns);
+                        recording.set_time(
+                            "stable",
+                            TimeCell::from_timestamp_nanos_since_epoch(time_ns),
+                        );
                         let topic = format!("cam{}", cam_idx);
                         log_image(recording, &topic, &img);
                     };

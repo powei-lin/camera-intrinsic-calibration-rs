@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use image::DynamicImage;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
@@ -6,11 +8,11 @@ use rerun::RecordingStream;
 use crate::detected_points::FrameFeature;
 
 pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
-    let gray_img = img.to_luma8();
-    let rr_image = rerun::Image::from_l8(gray_img.to_vec(), [gray_img.width(), gray_img.height()]);
-    recording
-        .log(format!("{}/image", topic), &rr_image)
-        .unwrap();
+    let mut bytes: Vec<u8> = Vec::new();
+    img.write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+        .expect("not able to write png");
+    let rr_image = rerun::EncodedImage::from_file_contents(bytes);
+    recording.log(format!("{}", topic), &rr_image).unwrap();
 }
 
 pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {
@@ -55,7 +57,10 @@ pub fn log_feature_frames(
         let (colors, labels): (Vec<_>, Vec<_>) = colors_labels.iter().cloned().unzip();
         let pts = rerun_shift(&pts);
 
-        recording.set_time_nanos("stable", time_ns);
+        recording.set_time(
+            "stable",
+            rerun::TimeCell::from_timestamp_nanos_since_epoch(time_ns),
+        );
         recording
             .log(
                 format!("{}/pts", topic),
