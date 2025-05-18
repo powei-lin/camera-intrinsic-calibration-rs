@@ -1,6 +1,6 @@
 use glam;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io::Write};
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BoardConfig {
@@ -9,18 +9,6 @@ pub struct BoardConfig {
     tag_rows: usize,
     tag_cols: usize,
     first_id: u32,
-}
-
-pub fn board_config_to_json(output_path: &str, board_config: &BoardConfig) {
-    let j = serde_json::to_string_pretty(board_config).unwrap();
-    let mut file = std::fs::File::create(output_path).unwrap();
-    file.write_all(j.as_bytes()).unwrap();
-}
-
-pub fn board_config_from_json(file_path: &str) -> BoardConfig {
-    let contents =
-        std::fs::read_to_string(file_path).expect("Should have been able to read the file");
-    serde_json::from_str(&contents).unwrap()
 }
 
 impl Default for BoardConfig {

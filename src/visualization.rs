@@ -12,7 +12,7 @@ pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
     img.write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
         .expect("not able to write png");
     let rr_image = rerun::EncodedImage::from_file_contents(bytes);
-    recording.log(format!("{}", topic), &rr_image).unwrap();
+    recording.log(topic.to_string(), &rr_image).unwrap();
 }
 
 pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {

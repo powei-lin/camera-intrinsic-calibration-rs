@@ -13,15 +13,15 @@ use log::debug;
 use nalgebra as na;
 use rand::seq::SliceRandom;
 use rerun::RecordingStream;
-use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
+use tiny_solver::loss_functions::HuberLoss;
 
 pub fn rtvec_to_na_dvec(
     rtvec: ((f64, f64, f64), (f64, f64, f64)),
 ) -> (na::DVector<f64>, na::DVector<f64>) {
     (
-        na::dvector![rtvec.0 .0, rtvec.0 .1, rtvec.0 .2],
-        na::dvector![rtvec.1 .0, rtvec.1 .1, rtvec.1 .2],
+        na::dvector![rtvec.0.0, rtvec.0.1, rtvec.0.2],
+        na::dvector![rtvec.1.0, rtvec.1.1, rtvec.1.2],
     )
 }
 

@@ -1,12 +1,10 @@
-use aprilgrid::detector::TagDetector;
 use aprilgrid::TagFamily;
+use aprilgrid::detector::TagDetector;
 use camera_intrinsic_calibration::board::Board;
-use camera_intrinsic_calibration::board::{
-    board_config_from_json, board_config_to_json, BoardConfig,
-};
+use camera_intrinsic_calibration::board::BoardConfig;
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
 use camera_intrinsic_calibration::detected_points::FrameFeature;
-use camera_intrinsic_calibration::io::{extrinsics_to_json, write_report};
+use camera_intrinsic_calibration::io::{object_from_json, object_to_json, write_report};
 use camera_intrinsic_calibration::types::{CalibParams, Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
 use camera_intrinsic_calibration::visualization::*;
@@ -74,10 +72,10 @@ fn main() {
     let cli = CCRSCli::parse();
     let detector = TagDetector::new(&cli.tag_family, None);
     let board = if let Some(board_config_path) = cli.board_config {
-        Board::from_config(&board_config_from_json(&board_config_path))
+        Board::from_config(&object_from_json(&board_config_path))
     } else {
         let config = BoardConfig::default();
-        board_config_to_json("default_board_config.json", &config);
+        object_to_json("default_board_config.json", &config);
         Board::from_config(&config)
     };
     let dataset_root = &cli.path;
@@ -221,7 +219,7 @@ fn main() {
         }
         write_report(&format!("{}/report.txt", output_folder), true, &rep_rms);
 
-        extrinsics_to_json(
+        object_to_json(
             &format!("{}/extrinsics.json", output_folder),
             &Extrinsics::new(&t_i_0),
         );
