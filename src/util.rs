@@ -13,15 +13,15 @@ use log::debug;
 use nalgebra as na;
 use rand::seq::SliceRandom;
 use rerun::RecordingStream;
-use tiny_solver::loss_functions::HuberLoss;
 use tiny_solver::Optimizer;
+use tiny_solver::loss_functions::HuberLoss;
 
 pub fn rtvec_to_na_dvec(
     rtvec: ((f64, f64, f64), (f64, f64, f64)),
 ) -> (na::DVector<f64>, na::DVector<f64>) {
     (
-        na::dvector![rtvec.0 .0, rtvec.0 .1, rtvec.0 .2],
-        na::dvector![rtvec.1 .0, rtvec.1 .1, rtvec.1 .2],
+        na::dvector![rtvec.0.0, rtvec.0.1, rtvec.0.2],
+        na::dvector![rtvec.1.0, rtvec.1.1, rtvec.1.2],
     )
 }
 
@@ -708,7 +708,10 @@ pub fn validation(
                         (p3p.x, p3p.y, p3p.z)
                     })
                     .collect();
-                recording.set_time_nanos("stable", f.time_ns);
+                recording.set_time(
+                    "stable",
+                    rerun::TimeCell::from_timestamp_nanos_since_epoch(f.time_ns),
+                );
                 recording
                     .log(
                         format!("/cam{}/board", cam_idx),
@@ -758,7 +761,10 @@ pub fn validation(
                     ((c.r, c.g, c.b, 255), format!("{}", r))
                 })
                 .unzip();
-            recording.set_time_nanos("stable", *time_ns);
+            recording.set_time(
+                "stable",
+                rerun::TimeCell::from_timestamp_nanos_since_epoch(*time_ns),
+            );
             recording
                 .log(
                     topic.to_string(),
@@ -843,7 +849,10 @@ pub fn init_and_calibrate_one_camera(
         let key_frames = [Some(frame_feature0.clone()), Some(frame_feature1.clone())];
         key_frames.iter().enumerate().for_each(|(i, k)| {
             let topic = format!("/cam{}/keyframe{}", cam_idx, i);
-            recording.set_time_nanos("stable", k.clone().unwrap().time_ns);
+            recording.set_time(
+                "stable",
+                rerun::TimeCell::from_timestamp_nanos_since_epoch(k.clone().unwrap().time_ns),
+            );
             recording
                 .log(topic, &rerun::TextLog::new("keyframe"))
                 .unwrap();
