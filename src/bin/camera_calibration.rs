@@ -11,6 +11,7 @@ use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Instant;
 use time::OffsetDateTime;
@@ -197,6 +198,12 @@ fn main() {
                     )
                 })
                 .collect();
+            object_to_json(
+                &format!("{}/cam{}_poses.json", output_folder, cam_idx),
+                &new_rtvec_map
+                    .iter()
+                    .collect::<BTreeMap<&usize, &RvecTvec>>(),
+            );
             let cam_transform =
                 na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse())
                     .with_axis_length(0.1);
@@ -242,6 +249,10 @@ fn main() {
                 serde_json::to_string_pretty(intrinsic).unwrap()
             );
             model_to_json(&format!("{}/cam{}.json", output_folder, cam_idx), intrinsic);
+            object_to_json(
+                &format!("{}/cam{}_poses.json", output_folder, cam_idx),
+                &rtvec_map.iter().collect::<BTreeMap<&usize, &RvecTvec>>(),
+            );
         }
         write_report(&format!("{}/report.txt", output_folder), false, &rep_rms);
     }

@@ -1,6 +1,6 @@
 [package]
 name = "camera-intrinsic-calibration"
-version = "0.7.2"
+version = "0.8.0"
 edition = "2024"
 authors = ["Powei Lin <poweilin1994@gmail.com>"]
 readme = "README.md"
