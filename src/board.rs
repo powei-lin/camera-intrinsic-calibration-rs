@@ -49,7 +49,7 @@ impl Board {
         for r in 0..tag_rows {
             for c in 0..tag_cols {
                 let start_x = (c as f32) * tag_size_meter * (1.0 + tag_spacing);
-                let start_y = -1.0 * (r as f32) * tag_size_meter * (1.0 + tag_spacing);
+                let start_y = -(r as f32) * tag_size_meter * (1.0 + tag_spacing);
                 id_to_3d.insert(
                     count_id,
                     glam::Vec3 {
