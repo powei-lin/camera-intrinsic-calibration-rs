@@ -41,7 +41,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sqpnp_simple = "0.2.0"
 time = { version = "0.3", features = ["local-offset"] }
-tiny-solver = {path = "../tiny-solver-rs"}
+tiny-solver = "0.18.0"
 
 [[bin]]
 name = "ccrs"
