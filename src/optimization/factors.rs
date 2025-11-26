@@ -55,11 +55,11 @@ impl<T: na::RealField> Factor<T> for ModelConvertFactor {
             .iter()
             .zip(p2ds1)
             .flat_map(|(p0, p1)| {
-                if let Some(p0) = p0 {
-                    if let Some(p1) = p1 {
-                        let pp = p0 - p1;
-                        return vec![pp[0].clone(), pp[1].clone()];
-                    }
+                if let Some(p0) = p0
+                    && let Some(p1) = p1
+                {
+                    let pp = p0 - p1;
+                    return vec![pp[0].clone(), pp[1].clone()];
                 }
                 vec![T::from_f64(10000.0).unwrap(), T::from_f64(10000.0).unwrap()]
             })

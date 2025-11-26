@@ -71,14 +71,14 @@ fn set_problem_parameter_disabled(
 
 fn features_avg_center(features: &HashMap<u32, FeaturePoint>) -> glam::Vec2 {
     features
-        .iter()
-        .map(|(_, p)| p.p2d)
+        .values()
+        .map(|p| p.p2d)
         .reduce(|acc, e| acc + e)
         .unwrap()
         / features.len() as f32
 }
 fn features_covered_area(features: &HashMap<u32, FeaturePoint>) -> f32 {
-    let (xmin, ymin, xmax, ymax) = features.iter().map(|(_, p)| p.p2d).fold(
+    let (xmin, ymin, xmax, ymax) = features.values().map(|p| p.p2d).fold(
         (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
         |acc, e| {
             let xmin = acc.0.min(e.x);
@@ -397,6 +397,9 @@ pub fn calib_camera(
                         .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
                 })
                 .unzip();
+            if p3ds.len() < 10 {
+                continue;
+            }
             valid_indexes.push(i);
             let (rvec, tvec) =
                 rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
