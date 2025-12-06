@@ -72,17 +72,47 @@ fn main() {
 
     let cli = CCRSCli::parse();
     let detector = TagDetector::new(&cli.tag_family, None);
-    let board = if let Some(board_config_path) = cli.board_config {
-        Board::from_config(&object_from_json(&board_config_path))
+    let board = setup_board(&cli);
+    let output_folder = setup_output_folder(&cli);
+
+    let recording = rerun::RecordingStreamBuilder::new("calibration")
+        .save(format!("{}/logging.rrd", output_folder))
+        .unwrap();
+    recording
+        .log_static("/", &rerun::ViewCoordinates::RDF())
+        .unwrap();
+
+    let cams_detected_feature_frames = load_feature_data(&cli, &detector, &board, &recording);
+
+    let (calibrated_intrinsics, cam_rtvecs) =
+        calibrate_all_cameras(&cli, &cams_detected_feature_frames, &recording);
+
+    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs);
+
+    save_and_validate_results(
+        &cli,
+        &output_folder,
+        &cams_detected_feature_frames,
+        &calibrated_intrinsics,
+        &cam_rtvecs,
+        &t_cam_i_0_init,
+        &recording,
+    );
+}
+
+fn setup_board(cli: &CCRSCli) -> Board {
+    if let Some(board_config_path) = &cli.board_config {
+        Board::from_config(&object_from_json(board_config_path))
     } else {
         let config = BoardConfig::default();
         object_to_json("default_board_config.json", &config);
         Board::from_config(&config)
-    };
-    let dataset_root = &cli.path;
-    let now = Instant::now();
-    let output_folder = if let Some(output_folder) = cli.output_folder {
-        output_folder
+    }
+}
+
+fn setup_output_folder(cli: &CCRSCli) -> String {
+    let output_folder = if let Some(output_folder) = &cli.output_folder {
+        output_folder.clone()
     } else {
         let now = OffsetDateTime::now_local().unwrap();
         format!(
@@ -96,52 +126,67 @@ fn main() {
         )
     };
     std::fs::create_dir_all(&output_folder).expect("Valid path");
+    output_folder
+}
 
-    let recording = rerun::RecordingStreamBuilder::new("calibration")
-        .save(format!("{}/logging.rrd", output_folder))
-        .unwrap();
-    recording
-        .log_static("/", &rerun::ViewCoordinates::RDF())
-        .unwrap();
+fn load_feature_data(
+    cli: &CCRSCli,
+    detector: &TagDetector,
+    board: &Board,
+    recording: &rerun::RecordingStream,
+) -> Vec<Vec<Option<FrameFeature>>> {
     trace!("Start loading data");
     println!("Start loading images and detecting charts.");
+    let now = Instant::now();
     let mut cams_detected_feature_frames: Vec<Vec<Option<FrameFeature>>> = match cli.dataset_format
     {
         DatasetFormat::Euroc => load_euroc(
-            dataset_root,
-            &detector,
-            &board,
+            &cli.path,
+            detector,
+            board,
             cli.start_idx,
             cli.step,
             cli.cam_num,
-            Some(&recording),
+            Some(recording),
         ),
         DatasetFormat::General => load_others(
-            dataset_root,
-            &detector,
-            &board,
+            &cli.path,
+            detector,
+            board,
             cli.start_idx,
             cli.step,
             cli.cam_num,
-            Some(&recording),
+            Some(recording),
         ),
     };
     let duration_sec = now.elapsed().as_secs_f64();
     println!("detecting feature took {:.6} sec", duration_sec);
-    println!("total: {} images", cams_detected_feature_frames[0].len());
+    if !cams_detected_feature_frames.is_empty() {
+        println!("total: {} images", cams_detected_feature_frames[0].len());
+        println!(
+            "avg: {} sec",
+            duration_sec / cams_detected_feature_frames[0].len() as f64
+        );
+    }
+
     cams_detected_feature_frames
         .iter_mut()
         .for_each(|f| f.truncate(cli.max_images));
-    println!(
-        "avg: {} sec",
-        duration_sec / cams_detected_feature_frames[0].len() as f64
-    );
-    let (calibrated_intrinsics, cam_rtvecs): (Vec<_>, Vec<_>) = cams_detected_feature_frames
+
+    cams_detected_feature_frames
+}
+
+fn calibrate_all_cameras(
+    cli: &CCRSCli,
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    recording: &rerun::RecordingStream,
+) -> (Vec<GenericModel<f64>>, Vec<HashMap<usize, RvecTvec>>) {
+    cams_detected_feature_frames
         .iter()
         .enumerate()
         .map(|(cam_idx, feature_frames)| {
             let topic = format!("/cam{}", cam_idx);
-            log_feature_frames(&recording, &topic, feature_frames);
+            log_feature_frames(recording, &topic, feature_frames);
             let mut calibrated_result: Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> = None;
             let max_trials = 3;
             let cam0_fixed_focal = if cam_idx == 0 { cli.fixed_focal } else { None };
@@ -153,9 +198,9 @@ fn main() {
             for trial in 0..max_trials {
                 calibrated_result = init_and_calibrate_one_camera(
                     cam_idx,
-                    &cams_detected_feature_frames,
+                    cams_detected_feature_frames,
                     &cli.model,
-                    &recording,
+                    recording,
                     &calib_params,
                     trial > 0,
                 );
@@ -169,19 +214,30 @@ fn main() {
                     cam_idx, max_trials
                 );
             }
-            let (final_result, rtvec_map) = calibrated_result.unwrap();
-            (final_result, rtvec_map)
+            calibrated_result.unwrap()
         })
-        .unzip();
-    let t_cam_i_0_init = init_camera_extrinsic(&cam_rtvecs);
-    for t in &t_cam_i_0_init {
+        .unzip()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn save_and_validate_results(
+    cli: &CCRSCli,
+    output_folder: &str,
+    cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
+    intrinsics: &[GenericModel<f64>],
+    cam_rtvecs: &[HashMap<usize, RvecTvec>],
+    t_cam_i_0_init: &[RvecTvec],
+    recording: &rerun::RecordingStream,
+) {
+    for t in t_cam_i_0_init {
         println!("r {} t {}", t.na_rvec(), t.na_tvec());
     }
+
     if let Some((camera_intrinsics, t_i_0, board_rtvecs)) = calib_all_camera_with_extrinsics(
-        &calibrated_intrinsics,
-        &t_cam_i_0_init,
-        &cam_rtvecs,
-        &cams_detected_feature_frames,
+        intrinsics,
+        t_cam_i_0_init,
+        cam_rtvecs,
+        cams_detected_feature_frames,
         cli.one_focal || cli.fixed_focal.is_some(),
         cli.disabled_distortion_num,
         cli.fixed_focal.is_some(),
@@ -215,7 +271,7 @@ fn main() {
                 intrinsic,
                 &new_rtvec_map,
                 &cams_detected_feature_frames[cam_idx],
-                Some(&recording),
+                Some(recording),
             );
             rep_rms.push(rep);
             println!(
@@ -232,15 +288,13 @@ fn main() {
         );
     } else {
         let mut rep_rms = Vec::new();
-        for (cam_idx, (intrinsic, rtvec_map)) in
-            calibrated_intrinsics.iter().zip(cam_rtvecs).enumerate()
-        {
+        for (cam_idx, (intrinsic, rtvec_map)) in intrinsics.iter().zip(cam_rtvecs).enumerate() {
             let rep = validation(
                 cam_idx,
                 intrinsic,
-                &rtvec_map,
+                rtvec_map,
                 &cams_detected_feature_frames[cam_idx],
-                Some(&recording),
+                Some(recording),
             );
             rep_rms.push(rep);
             println!(

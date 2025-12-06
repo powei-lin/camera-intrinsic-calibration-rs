@@ -5,6 +5,17 @@ use rand::seq::SliceRandom;
 
 use crate::detected_points::FrameFeature;
 
+/// Solves for homography using 6 point pairs with an L1/L2 metric.
+///
+/// This solver attempts to find a homography `H` and a distortion parameter `lambda`
+/// such that points `p` in source image map to `p_prime` in target image.
+/// The model assumes a simple radial distortion: `r_distorted = r * (1 + lambda * r^2)`.
+///
+/// # Arguments
+/// * `six_pt_pairs` - A slice of 6 point pairs `(pt0, pt1)`.
+///
+/// # Returns
+/// * `Option<(f32, na::Matrix3<f32>)>` - Tuple of (lambda, Homography Matrix) if successful.
 fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na::Matrix3<f32>)> {
     let mut m1: faer::Mat<f32> = faer::Mat::zeros(6, 8);
     for (r, (pt0, pt1)) in six_pt_pairs.iter().enumerate() {
@@ -12,16 +23,15 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         let y = pt0.y;
         let x_p = pt1.x;
         let y_p = pt1.y;
-        unsafe {
-            *m1.get_mut_unchecked(r, 0) = -x * y_p;
-            *m1.get_mut_unchecked(r, 1) = -y * y_p;
-            *m1.get_mut_unchecked(r, 2) = -y_p;
-            *m1.get_mut_unchecked(r, 3) = x * x_p;
-            *m1.get_mut_unchecked(r, 4) = x_p * y;
-            *m1.get_mut_unchecked(r, 5) = x_p;
-            *m1.get_mut_unchecked(r, 6) = -x * x * y_p - y * y * y_p;
-            *m1.get_mut_unchecked(r, 7) = x * x * x_p + x_p * y * y;
-        }
+
+        m1[(r, 0)] = -x * y_p;
+        m1[(r, 1)] = -y * y_p;
+        m1[(r, 2)] = -y_p;
+        m1[(r, 3)] = x * x_p;
+        m1[(r, 4)] = x_p * y;
+        m1[(r, 5)] = x_p;
+        m1[(r, 6)] = -x * x * y_p - y * y * y_p;
+        m1[(r, 7)] = x * x * x_p + x_p * y * y;
     }
     // let q_mat = mm1.transpose().qr().q();
     let q_mat = m1.transpose().qr().compute_Q();
@@ -36,6 +46,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
     let n07 = *n.get(0, 7);
     let n17 = *n.get(1, 7);
 
+    // Compute discriminant for quadratic equation
     let b_minus = -n02 * n17 + n05 * n16 + n06 * n15 - n07 * n12;
     let bb_4ac = n02 * n02 * n17 * n17
         - 2.0 * n02 * n05 * n16 * n17
@@ -49,20 +60,25 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
         + n06 * n06 * n15 * n15
         - 2.0 * n06 * n07 * n12 * n15
         + n07 * n07 * n12 * n12;
+
     if bb_4ac < 0.0 {
         debug!("b*b - 4ac < 0.0");
         return None;
     }
+
     let g_result = [
         (b_minus - bb_4ac.sqrt()) / (2.0 * (n02 * n07 - n05 * n06)),
         (b_minus + bb_4ac.sqrt()) / (2.0 * (n02 * n07 - n05 * n06)),
     ];
+
     let mut temp_h = [na::Matrix3::zeros(), na::Matrix3::zeros()];
     let mut l_l_p = na::Matrix2::zeros();
+
     for which_gamma in 0..2 {
         let gamma = g_result[which_gamma];
         let l = -(gamma * n06 + n16) / (-gamma * n02 - n12);
         let v1 = faer::Scale(gamma) * n.row(0) + n.row(1);
+
         temp_h[which_gamma][(0, 0)] = *v1.get(0);
         temp_h[which_gamma][(0, 1)] = *v1.get(1);
         temp_h[which_gamma][(0, 2)] = *v1.get(2);
@@ -78,30 +94,28 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
             let y = pt0.y;
             let x_p = pt1.x;
             let y_p = pt1.y;
-            unsafe {
-                *eq10a.get_mut_unchecked(row, 0) = -x * x_p;
-                *eq10a.get_mut_unchecked(row, 1) = -x_p * y;
-                *eq10a.get_mut_unchecked(row, 2) = -l * x * x * x_p - l * x_p * y * y - x_p;
-                *eq10a.get_mut_unchecked(row, 3) =
-                    l * x * x * x_p * x_p * temp_h[which_gamma][(0, 2)]
-                        + l * x * x * y_p * y_p * temp_h[which_gamma][(0, 2)]
-                        + l * x_p * x_p * y * y * temp_h[which_gamma][(0, 2)]
-                        + l * y * y * y_p * y_p * temp_h[which_gamma][(0, 2)]
-                        + x * x_p * x_p * temp_h[which_gamma][(0, 0)]
-                        + x * y_p * y_p * temp_h[which_gamma][(0, 0)]
-                        + x_p * x_p * y * temp_h[which_gamma][(0, 1)]
-                        + x_p * x_p * temp_h[which_gamma][(0, 2)]
-                        + y * y_p * y_p * temp_h[which_gamma][(0, 1)]
-                        + y_p * y_p * temp_h[which_gamma][(0, 2)];
 
-                *eq10b.get_mut_unchecked(row, 0) = -l * x * x * temp_h[which_gamma][(0, 2)]
-                    - l * y * y * temp_h[which_gamma][(0, 2)]
-                    - x * temp_h[which_gamma][(0, 0)]
-                    - y * temp_h[which_gamma][(0, 1)]
-                    - temp_h[which_gamma][(0, 2)];
-            }
+            eq10a[(row, 0)] = -x * x_p;
+            eq10a[(row, 1)] = -x_p * y;
+            eq10a[(row, 2)] = -l * x * x * x_p - l * x_p * y * y - x_p;
+            eq10a[(row, 3)] = l * x * x * x_p * x_p * temp_h[which_gamma][(0, 2)]
+                + l * x * x * y_p * y_p * temp_h[which_gamma][(0, 2)]
+                + l * x_p * x_p * y * y * temp_h[which_gamma][(0, 2)]
+                + l * y * y * y_p * y_p * temp_h[which_gamma][(0, 2)]
+                + x * x_p * x_p * temp_h[which_gamma][(0, 0)]
+                + x * y_p * y_p * temp_h[which_gamma][(0, 0)]
+                + x_p * x_p * y * temp_h[which_gamma][(0, 1)]
+                + x_p * x_p * temp_h[which_gamma][(0, 2)]
+                + y * y_p * y_p * temp_h[which_gamma][(0, 1)]
+                + y_p * y_p * temp_h[which_gamma][(0, 2)];
+
+            eq10b[(row, 0)] = -l * x * x * temp_h[which_gamma][(0, 2)]
+                - l * y * y * temp_h[which_gamma][(0, 2)]
+                - x * temp_h[which_gamma][(0, 0)]
+                - y * temp_h[which_gamma][(0, 1)]
+                - temp_h[which_gamma][(0, 2)];
         }
-        // std::cout << "svd\n";
+
         let mut eq10x = eq10b;
         eq10a
             .qr()
@@ -121,9 +135,7 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
     if !l0_valid && !l1_valid {
         debug!("both l0 and l1 are invalid.");
         return None;
-        // return 0.0;
     } else if l0_valid && l1_valid {
-        //  all valid
         let s0 = ((l_l_p[(0, 0)] / l_l_p[(0, 1)]).log10()).abs();
         let s1 = ((l_l_p[(1, 0)] / l_l_p[(1, 1)]).log10()).abs();
         if s0 < s1 {
@@ -145,6 +157,15 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
     Some((avg_lambda, homography_mat))
 }
 
+/// Evaluates the homography with a given distortion parameter `lambda`.
+///
+/// Computes the average reprojection error for normalized point pairs given
+/// a homography `H` and distortion param `lambda`.
+///
+/// # Arguments
+/// * `normalized_p2d_pair` - Normalized 2D point pairs.
+/// * `h_mat` - Homography matrix.
+/// * `lambda` - Distortion parameter.
 fn evaluate_homography_lambda(
     normalized_p2d_pair: &[(glam::Vec2, glam::Vec2)],
     h_mat: &na::Matrix3<f32>,
@@ -183,6 +204,18 @@ fn evaluate_homography_lambda(
     avg_dist / normalized_p2d_pair.len() as f32
 }
 
+/// Estimates the radial distortion parameter and homography matrix using RANSAC.
+///
+/// This function repeatedly samples 6 point pairs, solves for H and lambda,
+/// and keeps the one with the lowest reprojection error.
+///
+/// # Arguments
+/// * `frame_feature0` - Features from the first frame (center/normalized assumed to be handled internally or passed raw?).
+///   Note: The function normalizes points internally.
+/// * `frame_feature1` - Features from the second frame.
+///
+/// # Returns
+/// * `(f32, na::Matrix3<f32>)` - Best estimated (lambda, Homography).
 pub fn radial_distortion_homography(
     frame_feature0: &FrameFeature,
     frame_feature1: &FrameFeature,
@@ -228,6 +261,16 @@ pub fn radial_distortion_homography(
     (best_lambda, best_homography_mat)
 }
 
+/// Recovers the focal length from a homography matrix assuming a planar scene or pure rotation.
+///
+/// This uses closed-form constraints on the homography matrix to estimate the focal length.
+/// Assumes principal point is at the center (or pre-corrected) and square pixels if using standard derivation.
+///
+/// # Arguments
+/// * `h_mat` - The 3x3 Homography matrix.
+///
+/// # Returns
+/// * `Option<f32>` - The estimated focal length if solvable, otherwise None.
 pub fn homography_to_focal(h_mat: &na::Matrix3<f32>) -> Option<f32> {
     let h0 = h_mat[(0, 0)];
     let h1 = h_mat[(0, 1)];
