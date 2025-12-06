@@ -16,6 +16,7 @@ use rerun::RecordingStream;
 use tiny_solver::Optimizer;
 use tiny_solver::loss_functions::HuberLoss;
 
+/// Converts an `RvecTvec` tuple representation to nalgebra vectors.
 pub fn rtvec_to_na_dvec(
     rtvec: ((f64, f64, f64), (f64, f64, f64)),
 ) -> (na::DVector<f64>, na::DVector<f64>) {
@@ -95,6 +96,14 @@ fn vec2_distance2(v0: &glam::Vec2, v1: &glam::Vec2) -> f32 {
     let v = v0 - v1;
     v.x * v.x + v.y * v.y
 }
+/// Attempts to initialize the camera model using two frames.
+///
+/// Estimates homography and focal length, then initializes a UCM model.
+///
+/// # Arguments
+/// * `frame_feature0` - Features from the first frame.
+/// * `frame_feature1` - Features from the second frame.
+/// * `fixed_focal` - Optional fixed focal length.
 pub fn try_init_camera(
     frame_feature0: &FrameFeature,
     frame_feature1: &FrameFeature,
@@ -149,6 +158,13 @@ pub fn try_init_camera(
     }
 }
 
+/// Finds indices of the two best frames for initialization.
+///
+/// Selects frames based on the number of detected features and spatial coverage (area spread).
+///
+/// # Arguments
+/// * `detected_feature_frames` - List of feature frames.
+/// * `random_pick` - If true, randomly picks two frames with maximum detections.
 pub fn find_best_two_frames_idx(
     detected_feature_frames: &[Option<FrameFeature>],
     random_pick: bool,
@@ -202,6 +218,10 @@ pub fn find_best_two_frames_idx(
     (v1.last().unwrap().0, v0.last().unwrap().0)
 }
 
+/// Converts one camera model to another.
+///
+/// Uses optimization to find the best parameters for the `target_model` that effectively match the `source_model`.
+/// Handles specific conversions like UCM -> EUCM directly.
 pub fn convert_model(
     source_model: &GenericModel<f64>,
     target_model: &mut GenericModel<f64>,
@@ -261,6 +281,9 @@ pub fn convert_model(
     target_model.set_params(result_params);
 }
 
+/// Initializes a UCM model given poses and focal length guess.
+///
+/// Optimizes focal length and alpha using `UCMInitFocalAlphaFactor`.
 pub fn init_ucm(
     frame_feature0: &FrameFeature,
     frame_feature1: &FrameFeature,
@@ -354,6 +377,10 @@ pub fn init_ucm(
     }
 }
 
+/// Calibrates a single camera using multiple frames.
+///
+/// Performs bundle adjustment to refine camera intrinsics and frame poses.
+/// Uses `sqpnp` for initial pose estimation for each frame.
 pub fn calib_camera(
     frame_feature_list: &[Option<FrameFeature>],
     generic_camera: &GenericModel<f64>,
@@ -458,6 +485,7 @@ pub fn calib_camera(
     Some((calibrated_camera, rtvec_vec))
 }
 
+/// Converts a nalgebra `Isometry3` to a Rerun `Transform3D`.
 pub fn na_isometry3_to_rerun_transform3d(transform: &na::Isometry3<f64>) -> rerun::Transform3D {
     let t = (
         transform.translation.x as f32,
@@ -473,6 +501,9 @@ pub fn na_isometry3_to_rerun_transform3d(transform: &na::Isometry3<f64>) -> reru
     rerun::Transform3D::from_translation_rotation(t, rerun::Quaternion::from_xyzw(q_xyzw.into()))
 }
 
+/// Initializes relative extrinsics between cameras.
+///
+/// estimates transformations relative to camera 0 using frames where the board is visible in both cameras.
 pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<RvecTvec> {
     (0..cam_rtvecs.len())
         .map(|cam_i| {
@@ -525,6 +556,10 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
         .collect()
 }
 
+/// Performs multi-camera calibration including extrinsics.
+///
+/// Optimizes intrinsics for all cameras and extrinsics relative to camera 0.
+/// Uses `ReprojectionFactor` for camera 0 and `OtherCamReprojectionFactor` for others.
 pub fn calib_all_camera_with_extrinsics(
     cameras: &[GenericModel<f64>],
     t_cam_i_0: &[RvecTvec],
@@ -675,6 +710,10 @@ pub fn calib_all_camera_with_extrinsics(
     }
 }
 
+/// Computes validation metrics (reprojection error).
+///
+/// Calculates median and 99th percentile reprojection errors.
+/// Optionally logs errors and visualizations to Rerun.
 pub fn validation(
     cam_idx: usize,
     final_result: &GenericModel<f64>,
@@ -782,6 +821,9 @@ pub fn validation(
     (avg_99_percent, median_reprojection_error)
 }
 
+/// Orchestrates initialization and calibration for a single camera.
+///
+/// Selects best two frames for initialization, then runs full calibration.
 pub fn init_and_calibrate_one_camera(
     cam_idx: usize,
     cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],

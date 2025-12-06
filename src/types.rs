@@ -2,12 +2,14 @@ use camera_intrinsic_model::GenericModel;
 use nalgebra as na;
 use serde::{Deserialize, Serialize};
 
+/// Calibration parameters configuration.
 pub struct CalibParams {
     pub fixed_focal: Option<f64>,
     pub disabled_distortion_num: usize,
     pub one_focal: bool,
 }
 
+/// Rotation vector and translation vector.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RvecTvec {
     rvec: (f64, f64, f64),
@@ -21,6 +23,7 @@ impl RvecTvec {
             tvec: (tvec[0], tvec[1], tvec[2]),
         }
     }
+    /// Converts to nalgebra `Isometry3`.
     pub fn to_na_isometry3(&self) -> na::Isometry3<f64> {
         na::Isometry3::new(self.na_tvec().to_vec3(), self.na_rvec().to_vec3())
     }
@@ -34,6 +37,7 @@ impl RvecTvec {
 
 pub type Intrinsics = Vec<GenericModel<f64>>;
 
+/// Collection of extrinsics (poses) for multiple cameras/frames.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Extrinsics {
     rtvecs: Vec<RvecTvec>,
@@ -47,6 +51,7 @@ impl Extrinsics {
     }
 }
 
+/// Trait to convert a type to `RvecTvec`.
 pub trait ToRvecTvec {
     fn to_rvec_tvec(&self) -> RvecTvec;
 }
@@ -58,9 +63,11 @@ impl ToRvecTvec for na::Isometry3<f64> {
     }
 }
 
+/// Trait for converting vector types to nalgebra DVector.
 pub trait Vec3DVec<T: Clone> {
     fn to_dvec(&self) -> na::DVector<T>;
 }
+/// Trait for converting DVector to vector types.
 pub trait DVecVec3<T: Clone> {
     fn to_vec3(&self) -> nalgebra::Vector3<T>;
 }

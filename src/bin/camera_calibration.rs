@@ -100,6 +100,10 @@ fn main() {
     );
 }
 
+/// Loads the board configuration specified in the CLI arguments or creates a default one.
+///
+/// If a config file path is provided via `--board-config`, it loads from that file.
+/// Otherwise, it creates a default 6x6 AprilGrid configuration and saves it to `default_board_config.json`.
 fn setup_board(cli: &CCRSCli) -> Board {
     if let Some(board_config_path) = &cli.board_config {
         Board::from_config(&object_from_json(board_config_path))
@@ -110,6 +114,11 @@ fn setup_board(cli: &CCRSCli) -> Board {
     }
 }
 
+/// Sets up the output directory for calibration results.
+///
+/// If `--output-folder` is specified, uses that path.
+/// Otherwise, creates a directory named with the current timestamp under `results/`.
+/// Ensures the directory exists.
 fn setup_output_folder(cli: &CCRSCli) -> String {
     let output_folder = if let Some(output_folder) = &cli.output_folder {
         output_folder.clone()
@@ -129,6 +138,14 @@ fn setup_output_folder(cli: &CCRSCli) -> String {
     output_folder
 }
 
+/// Loads feature data from the dataset.
+///
+/// Supports Euroc and General dataset formats.
+/// Uses the provided tag detector and board configuration to extract features.
+/// Logs images to Rerun if enabled.
+///
+/// # Returns
+/// A vector of vectors, where each inner vector contains `Option<FrameFeature>` for a camera.
 fn load_feature_data(
     cli: &CCRSCli,
     detector: &TagDetector,
@@ -176,6 +193,15 @@ fn load_feature_data(
     cams_detected_feature_frames
 }
 
+/// Calibrates all cameras individually.
+///
+/// Iterates through each camera, detecting features and running the optimization.
+/// Retries calibration up to 3 times if it fails.
+///
+/// # Returns
+/// A tuple containing:
+/// - `Vec<GenericModel<f64>>`: The calibrated intrinsic models for each camera.
+/// - `Vec<HashMap<usize, RvecTvec>>`: estimated camera poses for each frame.
 fn calibrate_all_cameras(
     cli: &CCRSCli,
     cams_detected_feature_frames: &[Vec<Option<FrameFeature>>],
@@ -219,6 +245,11 @@ fn calibrate_all_cameras(
         .unzip()
 }
 
+/// Saves calibration results and performs validation.
+///
+/// saves intrinsics, extrinsics, and pose data to JSON files.
+/// Generates a validation report and logs visualization data to Rerun.
+/// If multiple cameras are present, it also attempts to calibrate extrinsics between cameras.
 #[allow(clippy::too_many_arguments)]
 fn save_and_validate_results(
     cli: &CCRSCli,

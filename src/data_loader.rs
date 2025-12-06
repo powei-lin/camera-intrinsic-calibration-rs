@@ -14,6 +14,9 @@ use rerun::TimeCell;
 
 const MIN_CORNERS: usize = 24;
 
+/// Parses the timestamp from a file path.
+///
+/// Assumes the filename (without extension) is a timestamp in nanoseconds.
 fn path_to_timestamp(path: &Path) -> i64 {
     let time_ns: i64 = path
         .file_stem()
@@ -25,6 +28,11 @@ fn path_to_timestamp(path: &Path) -> i64 {
     time_ns
 }
 
+/// Detects features in an image and converts it to a `FrameFeature`.
+///
+/// Uses `aprilgrid` detector to find tags.
+/// matches detected point IDs to 3D board coordinates.
+/// Returns `None` if the number of detected corners is less than `min_corners`.
 fn image_to_option_feature_frame(
     tag_detector: &TagDetector,
     img: &DynamicImage,
@@ -72,6 +80,18 @@ fn img_filter(rp: glob::GlobResult) -> Option<std::path::PathBuf> {
     None
 }
 
+/// Loads data from a Euroc-style dataset.
+///
+/// Iterates through camera folders, loads images, detects features in parallel.
+///
+/// # Arguments
+/// * `root_folder` - Path to the dataset root.
+/// * `tag_detector` - The tag detector instance.
+/// * `board` - The calibration board configuration.
+/// * `start_idx` - Starting image index.
+/// * `step` - Step size for sampling images.
+/// * `cam_num` - Number of cameras.
+/// * `recording_option` - Optional Rerun recording stream for visualization.
 pub fn load_euroc(
     root_folder: &str,
     tag_detector: &TagDetector,
@@ -123,6 +143,20 @@ pub fn load_euroc(
         .collect()
 }
 
+/// Loads data from a general dataset structure.
+///
+/// Iterates through camera folders matching `**/cam{}/**/*`.
+/// Loads images and detects features in parallel.
+/// Timestamps are generated artificially based on index if not present in filename (though this function ignores filename timestamp logic in favor of index-based).
+///
+/// # Arguments
+/// * `root_folder` - Path to the dataset root.
+/// * `tag_detector` - The tag detector instance.
+/// * `board` - The calibration board configuration.
+/// * `start_idx` - Starting image index.
+/// * `step` - Step size for sampling images.
+/// * `cam_num` - Number of cameras.
+/// * `recording_option` - Optional Rerun recording stream for visualization.
 pub fn load_others(
     root_folder: &str,
     tag_detector: &TagDetector,
