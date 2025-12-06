@@ -92,8 +92,7 @@ pub fn load_euroc(
             sorted_path.sort();
             let new_paths: Vec<_> = sorted_path.iter().skip(start_idx).step_by(step).collect();
             let mut time_frame: Vec<_> = new_paths
-                .iter()
-                .par_bridge()
+                .par_iter()
                 .progress_count(new_paths.len() as u64)
                 .map(|path| {
                     let time_ns = path_to_timestamp(path);
@@ -149,8 +148,7 @@ pub fn load_others(
                 .enumerate()
                 .collect();
             let mut time_frame: Vec<_> = new_paths
-                .iter()
-                .par_bridge()
+                .par_iter()
                 .progress_count(new_paths.len() as u64)
                 .map(|(idx, path)| {
                     let time_ns = *idx as i64 * 100000000;
