@@ -7,6 +7,7 @@ use rerun::RecordingStream;
 
 use crate::detected_points::FrameFeature;
 
+/// Logs an image to Rerun using PNG compression.
 pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
     let mut bytes: Vec<u8> = Vec::new();
     img.write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
@@ -15,6 +16,7 @@ pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
     recording.log(topic.to_string(), &rr_image).unwrap();
 }
 
+/// Generates a consistent random color for a given ID.
 pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {
     let mut rng = ChaCha8Rng::seed_from_u64(id as u64);
     let color_num = rng.random_range(0..2u32.pow(24));
@@ -26,11 +28,16 @@ pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {
     )
 }
 
-/// rerun use top left corner as (0, 0)
+/// Shifts 2D points by 0.5 for Rerun visualization.
+///
+/// Rerun considers pixel center coordinates differently, so a shift is often needed for alignment.
 pub fn rerun_shift(p2ds: &[(f32, f32)]) -> Vec<(f32, f32)> {
     p2ds.iter().map(|(x, y)| (*x + 0.5, *y + 0.5)).collect()
 }
 
+/// Logs detected feature points to Rerun.
+///
+/// Visualizes points with colors based on their IDs and 3D coordinate labels.
 pub fn log_feature_frames(
     recording: &RecordingStream,
     topic: &str,

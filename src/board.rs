@@ -2,6 +2,7 @@ use glam;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Configuration for an AprilGrid board.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BoardConfig {
     tag_size_meter: f32,
@@ -23,7 +24,9 @@ impl Default for BoardConfig {
     }
 }
 
+/// Represents a calibration board with known 3D points.
 pub struct Board {
+    /// Maps tag ID to its 3D position (usually top-left or other corner definition).
     pub id_to_3d: HashMap<u32, glam::Vec3>,
 }
 
@@ -37,6 +40,9 @@ impl Board {
             board_config.first_id,
         )
     }
+    /// Initializes an AprilGrid board with standard layout.
+    ///
+    /// The grid is generated starting from (0,0,0) and expanding in positive X (cols) and negative Y (rows).
     pub fn init_aprilgrid(
         tag_size_meter: f32,
         tag_spacing: f32,
@@ -89,6 +95,7 @@ impl Board {
     }
 }
 
+/// Creates a default 6x6 AprilGrid board.
 pub fn create_default_6x6_board() -> Board {
     Board::init_aprilgrid(0.088, 0.3, 6, 6, 0)
 }

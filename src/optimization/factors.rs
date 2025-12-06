@@ -4,6 +4,9 @@ use camera_intrinsic_model::*;
 use nalgebra as na;
 use tiny_solver::factors::Factor;
 
+/// Factor for converting one camera model to another by minimizing reprojection error of a dense grid.
+///
+/// This factor is used to find parameters of `target` model that best approximate the `source` model.
 #[derive(Clone)]
 pub struct ModelConvertFactor {
     pub source: GenericModel<f64>,
@@ -12,6 +15,10 @@ pub struct ModelConvertFactor {
 }
 
 impl ModelConvertFactor {
+    /// Creates a new conversion factor.
+    ///
+    /// Generates a grid of 2D points in the source image, unprojects them to 3D,
+    /// and stores them for optimizing the target model.
     pub fn new(
         source: &GenericModel<f64>,
         target: &GenericModel<f64>,
@@ -68,6 +75,10 @@ impl<T: na::RealField> Factor<T> for ModelConvertFactor {
     }
 }
 
+/// Factor for initializing focal length and alpha for UCM model.
+///
+/// Optimizes focal length (fx=fy) and alpha while keeping other params fixed?
+/// Actually it seems to optimize f and alpha, plus extrinsic rvec/tvec?
 pub struct UCMInitFocalAlphaFactor {
     pub target: GenericModel<f64>,
     pub p3d: na::Point3<f64>,
@@ -108,10 +119,15 @@ impl<T: na::RealField> Factor<T> for UCMInitFocalAlphaFactor {
     }
 }
 
+/// Standard reprojection error factor.
+///
+/// Minimizes the distance between projected 3D point and observed 2D point.
+/// Optimizes camera intrinsics and extrinsics (rvec, tvec).
 pub struct ReprojectionFactor {
     pub target: GenericModel<f64>,
     pub p3d: na::Point3<f64>,
     pub p2d: na::Vector2<f64>,
+    /// If true, constraints fx = fy (focal length x equals focal length y).
     pub xy_same_focal: bool,
 }
 
@@ -156,6 +172,10 @@ impl<T: na::RealField> Factor<T> for ReprojectionFactor {
     }
 }
 
+/// Reprojection factor involving another camera's extrinsic.
+///
+/// Used for multi-camera calibration or when chaining transforms.
+/// T_cam = T_i_0 * T_0_b
 pub struct OtherCamReprojectionFactor {
     pub target: GenericModel<f64>,
     pub p3d: na::Point3<f64>,
@@ -207,6 +227,10 @@ impl<T: na::RealField> Factor<T> for OtherCamReprojectionFactor {
     }
 }
 
+/// SE3 (Pose) error factor.
+///
+/// Computes error between estimated relative pose and measurement.
+/// Used for extrinsic calibration or loop closure factors.
 pub struct SE3Factor {
     pub t_0_b: na::Isometry3<f64>,
     pub t_i_b: na::Isometry3<f64>,

@@ -20,5 +20,7 @@ jobs:
       run: cargo fmt --check --verbose
     - name: Linting
       run: cargo clippy
+    - name: Test
+      run: cargo test --verbose
     - name: Build
       run: cargo build --verbose
