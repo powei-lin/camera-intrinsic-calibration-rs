@@ -25,7 +25,7 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Test on dataset
-      run:
+      run: |
         cargo install --path .
         wget https://vision.in.tum.de/tumvi/exported/euroc/1024_16/dataset-calib-cam1_1024_16.tar --no-check-certificate
         tar xf dataset-calib-cam1_1024_16.tar
