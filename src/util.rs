@@ -420,8 +420,12 @@ pub fn calib_camera(
                 .iter()
                 .zip(p3ds)
                 .filter_map(|(p2, p3)| {
-                    p2.as_ref()
-                        .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
+                    p2.as_ref().map(|p2| {
+                        (
+                            p3,
+                            glam::Vec2::new((p2.x / p2.z) as f32, (p2.y / p2.z) as f32),
+                        )
+                    })
                 })
                 .unzip();
             if p3ds.len() < 10 {
