@@ -18,7 +18,14 @@ classifiers = [
 authors = [
   { name = "Powei Lin", email = "poweilin1994@gmail.com" },
 ]
-dynamic = ["version"]
+dynamic = [
+  "version",
+  "description",
+  "readme",
+  "urls",
+  "license",
+  "keywords",
+]
 
 [tool.maturin]
 bindings = "bin"
