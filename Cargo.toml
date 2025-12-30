@@ -1,6 +1,6 @@
 [package]
 name = "camera-intrinsic-calibration"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2024"
 authors = ["Powei Lin <poweilin1994@gmail.com>"]
 readme = "README.md"
@@ -21,7 +21,7 @@ exclude = [
 ]
 
 [dependencies]
-aprilgrid = "0.7.0"
+aprilgrid = "0.8.0"
 camera-intrinsic-model = "0.8.0"
 clap = { version = "4.5", features = ["derive"] }
 colorous = "1.0.16"
