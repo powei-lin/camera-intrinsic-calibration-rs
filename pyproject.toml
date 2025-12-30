@@ -13,6 +13,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 authors = [
   { name = "Powei Lin", email = "poweilin1994@gmail.com" },
@@ -23,3 +24,8 @@ dynamic = ["version"]
 bindings = "bin"
 module-name = "ccrs"
 strip = true
+
+[project.optional-dependencies]
+rerun = [
+  "rerun-sdk==0.27.3",
+]

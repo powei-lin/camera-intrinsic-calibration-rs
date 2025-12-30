@@ -13,6 +13,8 @@ A pure rust camera intrinsic calibration tool.
 cargo install camera-intrinsic-calibration
 # Or pip install cli
 pip install camera-intrinsic-calibration
+# Or pip install cli with rerun
+pip install 'camera-intrinsic-calibration[rerun]'
 ```
 Or download from the latest [release](https://github.com/powei-lin/camera-intrinsic-calibration-rs/releases).
 
