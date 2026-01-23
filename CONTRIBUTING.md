@@ -5,7 +5,7 @@ Thank you for your interest in contributing to camera-intrinsic-calibration!
 ## Getting Started
 
 1. Fork the repository and clone it locally.
-2. Ensure you have Rust installed (MSRV: 1.70).
+2. Ensure you have the Rust stable toolchain installed (matching the version used in CI).
 3. Run `cargo test` to ensure everything works.
 4. Make your changes and run tests/lints: `cargo test --all-features`, `cargo clippy`, `cargo fmt --check`.
 
