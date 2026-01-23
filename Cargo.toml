@@ -46,7 +46,7 @@ tiny-solver = "0.18.0"
 [lints.clippy]
 # Deny correctness issues
 correctness = { level = "deny", priority = -1 }
-# Warn on suspicious code
+# Deny suspicious code
 suspicious = { level = "deny", priority = -1 }
 # Pedantic warnings
 pedantic = { level = "warn", priority = -1 }
