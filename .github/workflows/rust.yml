@@ -51,6 +51,18 @@ jobs:
         name: codecov-umbrella
     - name: Docs
       run: cargo doc --no-deps --document-private-items
+    - name: Security Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    - name: Upload Trivy Results
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
     - name: Build
       run: cargo build --verbose
     - name: Lint YAML
