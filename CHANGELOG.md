@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Improved code quality and security audits
 
-## [0.11.2] - 2025-01-XX
+## [0.11.2]
 
 ### Added
 - Initial release with camera intrinsic calibration functionality
