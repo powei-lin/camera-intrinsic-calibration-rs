@@ -7,14 +7,14 @@ use glam::Vec2;
 use nalgebra as na;
 
 fn bench_homography_solve(c: &mut Criterion) {
-    let f = 1000.0;
-    let k = na::Matrix3::new(f, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 1.0);
+    let f: f32 = 1000.0f32;
+    let k: na::Matrix3<f32> = na::Matrix3::new(f, 0.0f32, 0.0f32, 0.0f32, f, 0.0f32, 0.0f32, 0.0f32, 1.0f32);
     let k_inv = k.try_inverse().unwrap();
 
-    let axis = na::Unit::new_normalize(na::Vector3::new(1.0, 1.0, 0.5));
+    let axis = na::Unit::new_normalize(na::Vector3::<f32>::new(1.0f32, 1.0f32, 0.5f32));
     let angle = 0.2f32;
     let r_mat: na::Matrix3<f32> = na::Rotation3::from_axis_angle(&axis, angle).into_inner();
-    let h = k * r_mat.cast::<f64>() * k_inv;
+    let h = k * r_mat * k_inv;
 
     c.bench_function("homography_to_focal", |b| {
         b.iter(|| homography_to_focal(black_box(&h)))
