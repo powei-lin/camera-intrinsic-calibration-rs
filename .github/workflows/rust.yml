@@ -1,4 +1,4 @@
-name: Basic check
+name: CI
 
 on:
   push:
@@ -10,20 +10,55 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  msrv:
     runs-on: ubuntu-latest
-
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust@v1
+        with:
+          rust-version: 1.70
+      - name: Check MSRV
+        run: cargo check --all-targets --all-features
+  check:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - uses: actions-rust-lang/setup-rust@v1
+      with:
+        components: rustfmt, clippy
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Format
       run: cargo fmt --check --verbose
     - name: Linting
       run: cargo clippy --all-targets --all-features --workspace
     - name: Test
       run: cargo test --verbose --all-targets --all-features --workspace
+    - name: Coverage
+      run: |
+        cargo install cargo-tarpaulin
+        cargo tarpaulin --out Xml --output-dir coverage -- --all-targets --all-features --workspace
+    - name: Docs
+      run: cargo doc --no-deps --document-private-items
     - name: Build
       run: cargo build --verbose
+    - name: Lint YAML
+      run: |
+        pip install yamllint
+        yamllint .github/workflows/*.yml
+    - name: Lint Markdown
+      run: |
+        npm install -g markdownlint-cli
+        markdownlint "*.md"
+    - name: Lint Shell Scripts
+      run: |
+        sudo apt update && sudo apt install -y shellcheck
+        find . -name "*.sh" -exec shellcheck {} \;
     - name: Test on dataset
       run: |
         cargo install --path .

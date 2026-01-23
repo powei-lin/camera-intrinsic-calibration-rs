@@ -1,35 +1,12 @@
-# Stringent rustfmt configuration
+# Stringent rustfmt configuration (stable options only)
 max_width = 100
 hard_tabs = false
 tab_spaces = 4
 newline_style = "Auto"
 use_small_heuristics = "Max"
-fn_single_line = false
-struct_field_align_threshold = 20
-enum_discrim_align_threshold = 20
-match_arm_blocks = false
-match_arm_leading_pipes = "Never"
-fn_args_layout = "Tall"
-brace_style = "SameLineWhere"
-control_brace_style = "AlwaysSameLine"
-trailing_semicolon = true
-trailing_comma = "Vertical"
-match_block_trailing_comma = false
-blank_lines_upper_bound = 1
-blank_lines_lower_bound = 0
+fn_params_layout = "Tall"
 edition = "2024"
 merge_derives = true
 use_try_shorthand = false
 use_field_init_shorthand = false
 force_explicit_abi = true
-condense_wildcard_suffixes = false
-color = "Auto"
-required_version = "1.7.0"
-unstable_features = false
-disable_all_formatting = false
-skip_children = false
-hide_parse_errors = false
-error_on_line_overflow = true
-error_on_unformatted = false
-emit_mode = "Files"
-make_backup = false

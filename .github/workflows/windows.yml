@@ -1,53 +1,57 @@
-name: windows-build
+name: Windows Build
 
 on:
   push:
-    branches:
-      - '**'
+    branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
 
 defaults:
   run:
-    # necessary for windows
     shell: bash
 
 jobs:
   build:
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
     runs-on: windows-latest
     steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
       - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust@v1
+        with:
+          components: rustfmt, clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Format
         run: cargo fmt --check --verbose
       - name: Linting
         run: cargo clippy --all-targets --all-features --workspace
-
-      - name: Build
+      - name: Test
+        run: cargo test --verbose --all-targets --all-features --workspace
+      - name: Build Release
         run: cargo build --release --verbose
-
-      - name: Build Python
+      - name: Build Python Wheel
         run: |
-          python3 -m pip install maturin
-          python3 -m maturin build -r
-
-      - name: List
-        run: | 
-          ls ./target/release
-          ls ./target/wheels
-
-      - name: Move the artifact
+          python -m pip install maturin
+          python -m maturin build -r
+      - name: Prepare Artifacts
         run: |
-          mkdir -p ./artifacts
+          mkdir -p artifacts
           7z a ccrs-x86_64-pc-windows-msvc.zip ./target/release/ccrs.exe
           sha256sum ccrs-x86_64-pc-windows-msvc.zip > ccrs-x86_64-pc-windows-msvc.zip.sha256
-          mv ./target/wheels/*.whl .
-
-      - name: Archive artifact
-        uses: actions/upload-artifact@v4
+          mv ./target/wheels/*.whl artifacts/
+          mv *.zip *.sha256 artifacts/
+      - uses: actions/upload-artifact@v4
         with:
-          name: artifacts-ccrs-x86_64-pc-windows-msvc
-          path: |
-            *.zip
-            *.sha256
-            *.whl
+          name: windows-artifacts
+          path: artifacts/

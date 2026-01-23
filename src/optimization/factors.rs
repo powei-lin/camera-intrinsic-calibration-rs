@@ -37,15 +37,8 @@ impl ModelConvertFactor {
             }
         }
         let p3ds = source.unproject(&p2ds);
-        let p3ds: Vec<_> = p3ds
-            .iter()
-            .filter_map(|p| p.as_ref().map(|pp| pp.cast()))
-            .collect();
-        ModelConvertFactor {
-            source: source.cast(),
-            target: target.cast(),
-            p3ds,
-        }
+        let p3ds: Vec<_> = p3ds.iter().filter_map(|p| p.as_ref().map(|pp| pp.cast())).collect();
+        ModelConvertFactor { source: source.cast(), target: target.cast(), p3ds }
     }
     pub fn residaul_num(&self) -> usize {
         self.p3ds.len() * 2
@@ -112,10 +105,7 @@ impl<T: na::RealField> Factor<T> for UCMInitFocalAlphaFactor {
         let p3d_t = na::Vector3::new(p3d_t.x.clone(), p3d_t.y.clone(), p3d_t.z.clone());
         let p2d_p = model.project_one(&p3d_t);
         let p2d_tp = self.p2d.cast::<T>();
-        na::dvector![
-            p2d_p[0].clone() - p2d_tp[0].clone(),
-            p2d_p[1].clone() - p2d_tp[1].clone()
-        ]
+        na::dvector![p2d_p[0].clone() - p2d_tp[0].clone(), p2d_p[1].clone() - p2d_tp[1].clone()]
     }
 }
 
@@ -141,12 +131,7 @@ impl ReprojectionFactor {
         let target = target.cast();
         let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
         let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
-        ReprojectionFactor {
-            target,
-            p3d,
-            p2d,
-            xy_same_focal,
-        }
+        ReprojectionFactor { target, p3d, p2d, xy_same_focal }
     }
 }
 impl<T: na::RealField> Factor<T> for ReprojectionFactor {
@@ -165,10 +150,7 @@ impl<T: na::RealField> Factor<T> for ReprojectionFactor {
         let p2d_p = model.project_one(&p3d_t);
 
         let p2d_tp = self.p2d.cast::<T>();
-        na::dvector![
-            p2d_p[0].clone() - p2d_tp[0].clone(),
-            p2d_p[1].clone() - p2d_tp[1].clone()
-        ]
+        na::dvector![p2d_p[0].clone() - p2d_tp[0].clone(), p2d_p[1].clone() - p2d_tp[1].clone()]
     }
 }
 
@@ -193,12 +175,7 @@ impl OtherCamReprojectionFactor {
         let target = target.cast();
         let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
         let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
-        OtherCamReprojectionFactor {
-            target,
-            p3d,
-            p2d,
-            xy_same_focal,
-        }
+        OtherCamReprojectionFactor { target, p3d, p2d, xy_same_focal }
     }
 }
 impl<T: na::RealField> Factor<T> for OtherCamReprojectionFactor {
@@ -220,10 +197,7 @@ impl<T: na::RealField> Factor<T> for OtherCamReprojectionFactor {
         let p2d_p = model.project_one(&p3d_t);
 
         let p2d_tp = self.p2d.cast::<T>();
-        na::dvector![
-            p2d_p[0].clone() - p2d_tp[0].clone(),
-            p2d_p[1].clone() - p2d_tp[1].clone()
-        ]
+        na::dvector![p2d_p[0].clone() - p2d_tp[0].clone(), p2d_p[1].clone() - p2d_tp[1].clone()]
     }
 }
 
@@ -238,25 +212,16 @@ pub struct SE3Factor {
 
 impl SE3Factor {
     pub fn new(t_0_b: &na::Isometry3<f64>, t_i_b: &na::Isometry3<f64>) -> SE3Factor {
-        SE3Factor {
-            t_0_b: t_0_b.cast(),
-            t_i_b: t_i_b.cast(),
-        }
+        SE3Factor { t_0_b: t_0_b.cast(), t_i_b: t_i_b.cast() }
     }
 }
 
 impl<T: na::RealField> Factor<T> for SE3Factor {
     fn residual_func(&self, params: &[nalgebra::DVector<T>]) -> nalgebra::DVector<T> {
-        let rvec = na::Vector3::new(
-            params[0][0].clone(),
-            params[0][1].clone(),
-            params[0][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
+        let rvec =
+            na::Vector3::new(params[0][0].clone(), params[0][1].clone(), params[0][2].clone());
+        let tvec =
+            na::Vector3::new(params[1][0].clone(), params[1][1].clone(), params[1][2].clone());
         let t_i_0 = na::Isometry3::new(tvec, rvec);
         let t_diff = self.t_i_b.cast().inverse() * t_i_0 * self.t_0_b.cast();
         let r_diff = t_diff.rotation.scaled_axis();

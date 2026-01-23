@@ -24,12 +24,7 @@ fn test_homography_to_focal_general() {
     let solved_f = homography_to_focal(&h).expect("Failed to solve focal");
 
     // Accuracy might depend on angle size or float precision
-    assert!(
-        (solved_f - f).abs() < 10.0,
-        "Focal mismatch: got {}, expected {}",
-        solved_f,
-        f
-    );
+    assert!((solved_f - f).abs() < 10.0, "Focal mismatch: got {}, expected {}", solved_f, f);
 }
 
 #[test]
@@ -62,21 +57,14 @@ fn test_reprojection_factor() {
 
     let residual = factor.residual_func(&all_params);
 
-    assert!(
-        residual.norm() < 1e-4,
-        "Residual should be zero at GT. Got {}",
-        residual.norm()
-    );
+    assert!(residual.norm() < 1e-4, "Residual should be zero at GT. Got {}", residual.norm());
 
     // Perturb camera translation
     let tvec_bad = na::dvector![0.1, 0.0, 0.0];
     let bad_params = vec![cam_params.clone(), rvec, tvec_bad];
     let residual_bad = factor.residual_func(&bad_params);
 
-    assert!(
-        residual_bad.norm() > 1e-3,
-        "Residual should be non-zero for bad params"
-    );
+    assert!(residual_bad.norm() > 1e-3, "Residual should be non-zero for bad params");
 }
 
 #[test]
@@ -126,11 +114,7 @@ fn test_init_pose() {
         );
     }
 
-    let frame_feature = FrameFeature {
-        time_ns: 0,
-        img_w_h: (w, h),
-        features,
-    };
+    let frame_feature = FrameFeature { time_ns: 0, img_w_h: (w, h), features };
 
     let (r_vec, t_vec) = init_pose(&frame_feature, lambda);
 

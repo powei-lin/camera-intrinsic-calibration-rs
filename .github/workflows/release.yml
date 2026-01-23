@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust@v1
+        with:
+          components: rustfmt, clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build Release
+        run: cargo build --release --verbose
+      - name: Run Tests
+        run: cargo test --verbose --all-targets --all-features --workspace
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/release/ccrs
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Python Wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --sdist
+      - name: Publish to PyPI
+        uses: PyO3/maturin-action@v1
+        with:
+          command: publish
+          args: --skip-existing
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}

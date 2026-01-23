@@ -45,23 +45,21 @@ tiny-solver = "0.18.0"
 
 [lints.clippy]
 # Deny correctness issues
-correctness = "deny"
+correctness = { level = "deny", priority = -1 }
 # Warn on suspicious code
-suspicious = "deny"
+suspicious = { level = "deny", priority = -1 }
 # Pedantic warnings
-pedantic = "warn"
+pedantic = { level = "warn", priority = -1 }
 # Nursery lints
-nursery = "warn"
+nursery = { level = "warn", priority = -1 }
 # Cargo issues
-cargo = "warn"
+cargo = { level = "warn", priority = -1 }
 # Style issues
-style = "warn"
+style = { level = "warn", priority = -1 }
 # Complexity
-complexity = "warn"
+complexity = { level = "warn", priority = -1 }
 # Performance
-perf = "warn"
-# Restrictions
-restriction = "warn"
+perf = { level = "warn", priority = -1 }
 
 # Allow some pedantic lints that are too strict
 too_many_lines = "allow"
@@ -77,6 +75,10 @@ similar_names = "allow"
 struct_excessive_bools = "allow"
 fn_params_excessive_bools = "allow"
 many_single_char_names = "allow"
+# Allow blanket restriction lints
+blanket_clippy_restriction_lints = "allow"
+# Allow lint groups priority
+lint_groups_priority = "allow"
 
 [[bin]]
 name = "ccrs"

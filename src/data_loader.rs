@@ -18,13 +18,7 @@ const MIN_CORNERS: usize = 24;
 ///
 /// Assumes the filename (without extension) is a timestamp in nanoseconds.
 fn path_to_timestamp(path: &Path) -> i64 {
-    let time_ns: i64 = path
-        .file_stem()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap_or(0);
+    let time_ns: i64 = path.file_stem().unwrap().to_str().unwrap().parse().unwrap_or(0);
     time_ns
 }
 
@@ -175,12 +169,8 @@ pub fn load_others(
                 img_paths.into_iter().filter_map(img_filter).collect();
 
             sorted_path.sort();
-            let new_paths: Vec<_> = sorted_path
-                .iter()
-                .skip(start_idx)
-                .step_by(step)
-                .enumerate()
-                .collect();
+            let new_paths: Vec<_> =
+                sorted_path.iter().skip(start_idx).step_by(step).enumerate().collect();
             let mut time_frame: Vec<_> = new_paths
                 .par_iter()
                 .progress_count(new_paths.len() as u64)

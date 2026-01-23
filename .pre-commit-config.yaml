@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+  - repo: https://github.com/pre-commit/mirrors-markdownlint
+    rev: v0.13.0
+    hooks:
+      - id: markdownlint
+  - repo: local
+    hooks:
+      - id: rust-fmt
+        name: rust-fmt
+        entry: cargo fmt --check
+        language: system
+        files: \.rs$
+        pass_filenames: false
+      - id: rust-clippy
+        name: rust-clippy
+        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        language: system
+        files: \.rs$
+        pass_filenames: false
