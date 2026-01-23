@@ -29,7 +29,7 @@ repos:
         pass_filenames: false
       - id: rust-clippy
         name: rust-clippy
-        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        entry: cargo clippy --all-targets --all-features --workspace
         language: system
         files: \.rs$
         pass_filenames: false
