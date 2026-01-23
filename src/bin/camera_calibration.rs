@@ -1,5 +1,5 @@
-use aprilgrid::TagFamily;
 use aprilgrid::detector::TagDetector;
+use aprilgrid::TagFamily;
 use camera_intrinsic_calibration::board::Board;
 use camera_intrinsic_calibration::board::BoardConfig;
 use camera_intrinsic_calibration::data_loader::{load_euroc, load_others};
@@ -7,6 +7,9 @@ use camera_intrinsic_calibration::detected_points::FrameFeature;
 use camera_intrinsic_calibration::io::{object_from_json, object_to_json, write_report};
 use camera_intrinsic_calibration::types::{CalibParams, Extrinsics, RvecTvec, ToRvecTvec};
 use camera_intrinsic_calibration::util::*;
+#[cfg(feature = "visualization")]
+use camera_intrinsic_calibration::vis_ext::create_recording_stream;
+#[cfg(feature = "visualization")]
 use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
