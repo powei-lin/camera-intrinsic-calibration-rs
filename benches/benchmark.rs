@@ -27,7 +27,7 @@ fn bench_reprojection_residual(c: &mut Criterion) {
 
     let p3d = glam::Vec3::new(1.0, 2.0, 10.0);
     let p2d = Vec2::new(320.0, 240.0);
-    let factor = ReprojectionFactor::new(&model, &p3d, &p2d, false, false);
+    let factor = ReprojectionFactor::new(&model, &p3d, &p2d, false);
 
     let rvec = na::dvector![0.0, 0.0, 0.0];
     let tvec = na::dvector![0.0, 0.0, 0.0];
