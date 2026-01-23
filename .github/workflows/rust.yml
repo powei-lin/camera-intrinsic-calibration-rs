@@ -43,6 +43,12 @@ jobs:
       run: |
         cargo install cargo-tarpaulin
         cargo tarpaulin --out Xml --output-dir coverage -- --all-targets --all-features --workspace
+    - name: Upload Coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: coverage/cobertura.xml
+        flags: unittests
+        name: codecov-umbrella
     - name: Docs
       run: cargo doc --no-deps --document-private-items
     - name: Build
