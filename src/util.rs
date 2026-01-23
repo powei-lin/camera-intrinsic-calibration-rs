@@ -13,16 +13,16 @@ use log::debug;
 use nalgebra as na;
 use rand::seq::SliceRandom;
 use rerun::RecordingStream;
-use tiny_solver::Optimizer;
 use tiny_solver::loss_functions::HuberLoss;
+use tiny_solver::Optimizer;
 
 /// Converts an `RvecTvec` tuple representation to nalgebra vectors.
 pub fn rtvec_to_na_dvec(
     rtvec: ((f64, f64, f64), (f64, f64, f64)),
 ) -> (na::DVector<f64>, na::DVector<f64>) {
     (
-        na::dvector![rtvec.0.0, rtvec.0.1, rtvec.0.2],
-        na::dvector![rtvec.1.0, rtvec.1.1, rtvec.1.2],
+        na::dvector![rtvec.0 .0, rtvec.0 .1, rtvec.0 .2],
+        na::dvector![rtvec.1 .0, rtvec.1 .1, rtvec.1 .2],
     )
 }
 
@@ -558,6 +558,73 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
             RvecTvec::new(result.get("rvec").unwrap(), result.get("tvec").unwrap())
         })
         .collect()
+}
+
+/// Validates extrinsic calibration quality by checking reprojection consistency
+/// across camera pairs.
+pub fn validate_extrinsics(
+    intrinsics: &[GenericModel<f64>],
+    extrinsics: &[RvecTvec],
+    cam_rtvecs: &[HashMap<usize, RvecTvec>],
+) -> Vec<(usize, usize, f64)> {
+    let mut validation_errors = Vec::new();
+
+    // For each pair of cameras, check consistency
+    for i in 0..intrinsics.len() {
+        for j in (i + 1)..intrinsics.len() {
+            if let (Some(rt_i), Some(rt_j)) = (cam_rtvecs.get(i), cam_rtvecs.get(j)) {
+                // Compute expected relative pose i->j via cam0
+                let rt_0_i = &extrinsics[i];
+                let rt_0_j = &extrinsics[j];
+                let rt_i_j_expected = rt_0_i.to_na_isometry3().inverse() * rt_0_j.to_na_isometry3();
+
+                // Get measured relative pose
+                if let (Some(measured_i_j), Some(measured_j_i)) = (
+                    find_relative_pose(rt_i, rt_j),
+                    find_relative_pose(rt_j, rt_i),
+                ) {
+                    let error = pose_difference(&rt_i_j_expected, &measured_i_j);
+                    validation_errors.push((i, j, error));
+
+                    let error_inv = pose_difference(&rt_i_j_expected.inverse(), &measured_j_i);
+                    validation_errors.push((j, i, error_inv));
+                }
+            }
+        }
+    }
+
+    validation_errors
+}
+
+fn find_relative_pose(
+    from_rtvecs: &HashMap<usize, RvecTvec>,
+    to_rtvecs: &HashMap<usize, RvecTvec>,
+) -> Option<RvecTvec> {
+    // Find common frames and compute relative pose
+    let common_frames: Vec<_> = from_rtvecs
+        .keys()
+        .filter(|k| to_rtvecs.contains_key(k))
+        .collect();
+    if common_frames.len() < 3 {
+        return None;
+    }
+
+    // Use first common frame as reference
+    let ref_frame = *common_frames[0];
+    let rt_from = from_rtvecs.get(&ref_frame)?;
+    let rt_to = to_rtvecs.get(&ref_frame)?;
+
+    Some((rt_from.to_na_isometry3().inverse() * rt_to.to_na_isometry3()).to_rvec_tvec())
+}
+
+fn pose_difference(pose1: &na::Isometry3<f64>, pose2: &na::Isometry3<f64>) -> f64 {
+    // Compute angular and translational difference
+    let rot_diff = pose1.rotation.inverse() * pose2.rotation;
+    let axis_angle = rot_diff.scaled_axis();
+    let angle = axis_angle.norm();
+    let trans_diff = (pose1.translation - pose2.translation).norm();
+
+    angle + trans_diff // Simple combined metric
 }
 
 /// Performs multi-camera calibration including extrinsics.
