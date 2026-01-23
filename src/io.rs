@@ -1,6 +1,8 @@
 use std::io::Write;
 
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::types::RvecTvec;
 
 /// Serializes an object to a JSON file.
 pub fn object_to_json<T: Serialize>(output_path: &str, object: &T) {
