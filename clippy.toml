@@ -1,0 +1,5 @@
+# Stringent clippy configuration
+msrv = "1.70"
+allow-dirty = false
+allow-staged = false
+allow-untracked = false

@@ -43,6 +43,41 @@ sqpnp_simple = "0.2.0"
 time = { version = "0.3", features = ["local-offset"] }
 tiny-solver = "0.18.0"
 
+[lints.clippy]
+# Deny correctness issues
+correctness = "deny"
+# Warn on suspicious code
+suspicious = "deny"
+# Pedantic warnings
+pedantic = "warn"
+# Nursery lints
+nursery = "warn"
+# Cargo issues
+cargo = "warn"
+# Style issues
+style = "warn"
+# Complexity
+complexity = "warn"
+# Performance
+perf = "warn"
+# Restrictions
+restriction = "warn"
+
+# Allow some pedantic lints that are too strict
+too_many_lines = "allow"
+module_name_repetitions = "allow"
+unused_self = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
+many_single_char_names = "allow"
+
 [[bin]]
 name = "ccrs"
 path = "src/bin/camera_calibration.rs"

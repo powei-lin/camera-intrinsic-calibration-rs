@@ -18,6 +18,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Format
+        run: cargo fmt --check --verbose
+      - name: Linting
+        run: cargo clippy --all-targets --all-features --workspace
 
       - name: Build
         run: cargo build --release --verbose

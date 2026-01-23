@@ -19,9 +19,9 @@ jobs:
     - name: Format
       run: cargo fmt --check --verbose
     - name: Linting
-      run: cargo clippy
+      run: cargo clippy --all-targets --all-features --workspace
     - name: Test
-      run: cargo test --verbose
+      run: cargo test --verbose --all-targets --all-features --workspace
     - name: Build
       run: cargo build --verbose
     - name: Test on dataset
