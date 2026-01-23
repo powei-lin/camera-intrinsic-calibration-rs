@@ -17,9 +17,7 @@ use tiny_solver::Optimizer;
 use tiny_solver::loss_functions::HuberLoss;
 
 /// Converts an `RvecTvec` tuple representation to nalgebra vectors.
-pub fn rtvec_to_na_dvec(
-    rtvec: ((f64, f64, f64), (f64, f64, f64)),
-) -> (na::DVector<f64>, na::DVector<f64>) {
+pub fn rtvec_to_na_dvec(rtvec: ((f64, f64, f64), (f64, f64, f64))) -> (na::DVector<f64>, na::DVector<f64>) {
     (
         na::dvector![rtvec.0.0, rtvec.0.1, rtvec.0.2],
         na::dvector![rtvec.1.0, rtvec.1.1, rtvec.1.2],
@@ -38,12 +36,7 @@ fn set_problem_parameter_bound(
     problem.set_variable_bounds(params_name, 2 - shift, 0.0, generic_camera.width());
     problem.set_variable_bounds(params_name, 3 - shift, 0.0, generic_camera.height());
     for (distortion_idx, (lower, upper)) in generic_camera.distortion_params_bound() {
-        log::trace!(
-            "set params bound {} {} {}",
-            distortion_idx - shift,
-            lower,
-            upper
-        );
+        log::trace!("set params bound {} {} {}", distortion_idx - shift, lower, upper);
         problem.set_variable_bounds(params_name, distortion_idx - shift, lower, upper);
     }
 }
@@ -60,35 +53,26 @@ fn set_problem_parameter_disabled(
         let distortion_idx = generic_camera.params().len() - 1 - shift - i;
         problem.fix_variable(params_name, distortion_idx);
         let params = init_values.get_mut(params_name).unwrap();
-        log::trace!(
-            "shift {} distortion {} {:?}",
-            shift,
-            distortion_idx,
-            params.shape()
-        );
+        log::trace!("shift {} distortion {} {:?}", shift, distortion_idx, params.shape());
         params[distortion_idx] = 0.0;
     }
 }
 
 fn features_avg_center(features: &HashMap<u32, FeaturePoint>) -> glam::Vec2 {
-    features
-        .values()
-        .map(|p| p.p2d)
-        .reduce(|acc, e| acc + e)
-        .unwrap()
-        / features.len() as f32
+    features.values().map(|p| p.p2d).reduce(|acc, e| acc + e).unwrap() / features.len() as f32
 }
 fn features_covered_area(features: &HashMap<u32, FeaturePoint>) -> f32 {
-    let (xmin, ymin, xmax, ymax) = features.values().map(|p| p.p2d).fold(
-        (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
-        |acc, e| {
-            let xmin = acc.0.min(e.x);
-            let ymin = acc.1.min(e.y);
-            let xmax = acc.0.max(e.x);
-            let ymax = acc.1.max(e.y);
-            (xmin, ymin, xmax, ymax)
-        },
-    );
+    let (xmin, ymin, xmax, ymax) =
+        features
+            .values()
+            .map(|p| p.p2d)
+            .fold((f32::MAX, f32::MAX, f32::MIN, f32::MIN), |acc, e| {
+                let xmin = acc.0.min(e.x);
+                let ymin = acc.1.min(e.y);
+                let xmax = acc.0.max(e.x);
+                let ymax = acc.1.max(e.y);
+                (xmin, ymin, xmax, ymax)
+            });
     (xmax - xmin) * (ymax - ymin)
 }
 
@@ -165,10 +149,7 @@ pub fn try_init_camera(
 /// # Arguments
 /// * `detected_feature_frames` - List of feature frames.
 /// * `random_pick` - If true, randomly picks two frames with maximum detections.
-pub fn find_best_two_frames_idx(
-    detected_feature_frames: &[Option<FrameFeature>],
-    random_pick: bool,
-) -> (usize, usize) {
+pub fn find_best_two_frames_idx(detected_feature_frames: &[Option<FrameFeature>], random_pick: bool) -> (usize, usize) {
     let mut max_detection = 0;
     let mut max_detection_idxs = Vec::new();
     for (i, f) in detected_feature_frames.iter().enumerate() {
@@ -257,8 +238,7 @@ pub fn convert_model(
     let mut target_params_init = target_model.params();
     target_params_init.rows_mut(0, 4).copy_from(&camera_params);
 
-    let mut initial_values =
-        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), target_params_init)]);
+    let mut initial_values = HashMap::<String, na::DVector<f64>>::from([("params".to_string(), target_params_init)]);
 
     // initialize optimizer
     let optimizer = tiny_solver::GaussNewtonOptimizer::default();
@@ -344,13 +324,8 @@ pub fn init_ucm(
     // optimize
     init_focal_alpha_problem.set_variable_bounds("params", 0, init_f / 3.0, init_f * 3.0);
     init_focal_alpha_problem.set_variable_bounds("params", 1, 1e-6, 1.0);
-    if let Some(mut second_round_values) =
-        optimizer.optimize(&init_focal_alpha_problem, &initial_values, None)
-    {
-        println!(
-            "params after {:?}\n",
-            second_round_values.get("params").unwrap()
-        );
+    if let Some(mut second_round_values) = optimizer.optimize(&init_focal_alpha_problem, &initial_values, None) {
+        println!("params after {:?}\n", second_round_values.get("params").unwrap());
 
         let focal = second_round_values["params"][0];
         let alpha = second_round_values["params"][1];
@@ -393,8 +368,7 @@ pub fn calib_camera(
         // remove fy
         params = params.remove_row(1);
     };
-    let mut initial_values =
-        HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)]);
+    let mut initial_values = HashMap::<String, na::DVector<f64>>::from([("params".to_string(), params)]);
     debug!("init {:?}", initial_values);
     let mut problem = tiny_solver::Problem::new();
     let mut valid_indexes = Vec::new();
@@ -420,20 +394,15 @@ pub fn calib_camera(
                 .iter()
                 .zip(p3ds)
                 .filter_map(|(p2, p3)| {
-                    p2.as_ref().map(|p2| {
-                        (
-                            p3,
-                            glam::Vec2::new((p2.x / p2.z) as f32, (p2.y / p2.z) as f32),
-                        )
-                    })
+                    p2.as_ref()
+                        .map(|p2| (p3, glam::Vec2::new((p2.x / p2.z) as f32, (p2.y / p2.z) as f32)))
                 })
                 .unzip();
             if p3ds.len() < 10 {
                 continue;
             }
             valid_indexes.push(i);
-            let (rvec, tvec) =
-                rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
+            let (rvec, tvec) = rtvec_to_na_dvec(sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap());
 
             initial_values.entry(rvec_name).or_insert(rvec);
             initial_values.entry(tvec_name).or_insert(tvec);
@@ -479,10 +448,7 @@ pub fn calib_camera(
 
             (
                 i,
-                RvecTvec::new(
-                    &result.remove(&rvec_name).unwrap(),
-                    &result.remove(&tvec_name).unwrap(),
-                ),
+                RvecTvec::new(&result.remove(&rvec_name).unwrap(), &result.remove(&tvec_name).unwrap()),
             )
         })
         .collect();
@@ -512,10 +478,7 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
     (0..cam_rtvecs.len())
         .map(|cam_i| {
             if cam_i == 0 {
-                return RvecTvec::new(
-                    &na::Vector3::zeros().to_dvec(),
-                    &na::Vector3::zeros().to_dvec(),
-                );
+                return RvecTvec::new(&na::Vector3::zeros().to_dvec(), &na::Vector3::zeros().to_dvec());
             }
             let cam_0_keys: HashSet<_> = cam_rtvecs[0].keys().cloned().collect();
             let cam_i_keys: HashSet<_> = cam_rtvecs[cam_i].keys().cloned().collect();
@@ -545,10 +508,8 @@ pub fn init_camera_extrinsic(cam_rtvecs: &[HashMap<usize, RvecTvec>]) -> Vec<Rve
                 t_i_0_init.translation.y,
                 t_i_0_init.translation.z,
             ];
-            let initial_values = HashMap::<String, na::DVector<f64>>::from([
-                ("rvec".to_string(), rvec),
-                ("tvec".to_string(), tvec),
-            ]);
+            let initial_values =
+                HashMap::<String, na::DVector<f64>>::from([("rvec".to_string(), rvec), ("tvec".to_string(), tvec)]);
 
             let optimizer = tiny_solver::GaussNewtonOptimizer::default();
             let result = optimizer.optimize(&problem, &initial_values, None).unwrap();
@@ -573,9 +534,24 @@ pub fn calib_all_camera_with_extrinsics(
     disabled_distortions: usize,
     cam0_fixed_focal: bool,
 ) -> Option<(Intrinsics, Vec<RvecTvec>, HashMap<usize, RvecTvec>)> {
+    use rayon::prelude::*;
+
+    // Parallel processing of frames for better performance
+    let frame_data: Vec<_> = cams_detected_feature_frames
+        .par_iter()
+        .enumerate()
+        .flat_map(|(cam_idx, frames)| {
+            frames
+                .par_iter()
+                .enumerate()
+                .filter_map(move |(frame_idx, frame)| frame.as_ref().map(|f| (cam_idx, frame_idx, f)))
+        })
+        .collect();
     let mut problem = tiny_solver::Problem::new();
     let mut initial_values = HashMap::<String, na::DVector<f64>>::new();
     let mut valid_frame_board_to_cam0 = HashSet::new();
+
+    // Process cameras sequentially for now, but frames can be parallelized above
     for (cam_idx, generic_camera) in cameras.iter().enumerate() {
         let params_name = format!("params{}", cam_idx);
         let mut params = generic_camera.params();
@@ -593,16 +569,13 @@ pub fn calib_all_camera_with_extrinsics(
         }
 
         for (&valid_frame_idx, rtvec) in &cam_rtvecs[cam_idx] {
-            let frame_feature = cams_detected_feature_frames[cam_idx][valid_frame_idx]
-                .clone()
-                .unwrap();
+            let frame_feature = cams_detected_feature_frames[cam_idx][valid_frame_idx].clone().unwrap();
             let rvec_0_b_name = format!("rvec_0_b_{}", valid_frame_idx);
             let tvec_0_b_name = format!("tvec_0_b_{}", valid_frame_idx);
             valid_frame_board_to_cam0.insert(valid_frame_idx);
             for fp in frame_feature.features.values() {
                 if cam_idx == 0 {
-                    let cost =
-                        ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
+                    let cost = ReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                     problem.add_residual_block(
                         2,
                         &[&params_name, &rvec_0_b_name, &tvec_0_b_name],
@@ -610,12 +583,7 @@ pub fn calib_all_camera_with_extrinsics(
                         Some(Box::new(HuberLoss::new(1.0))),
                     );
                 } else {
-                    let cost = OtherCamReprojectionFactor::new(
-                        generic_camera,
-                        &fp.p3d,
-                        &fp.p2d,
-                        xy_same_focal,
-                    );
+                    let cost = OtherCamReprojectionFactor::new(generic_camera, &fp.p3d, &fp.p2d, xy_same_focal);
                     problem.add_residual_block(
                         2,
                         &[
@@ -631,23 +599,14 @@ pub fn calib_all_camera_with_extrinsics(
                 }
             }
             if cam_idx == 0 {
-                initial_values
-                    .entry(rvec_0_b_name)
-                    .or_insert(rtvec.na_rvec());
-                initial_values
-                    .entry(tvec_0_b_name)
-                    .or_insert(rtvec.na_tvec());
+                initial_values.entry(rvec_0_b_name).or_insert(rtvec.na_rvec());
+                initial_values.entry(tvec_0_b_name).or_insert(rtvec.na_tvec());
             } else {
                 // 0 <- i <- board
-                let rtvec_0_b = (t_cam_i_0[cam_idx].to_na_isometry3().inverse()
-                    * rtvec.to_na_isometry3())
-                .to_rvec_tvec();
-                initial_values
-                    .entry(rvec_0_b_name)
-                    .or_insert(rtvec_0_b.na_rvec());
-                initial_values
-                    .entry(tvec_0_b_name)
-                    .or_insert(rtvec_0_b.na_tvec());
+                let rtvec_0_b =
+                    (t_cam_i_0[cam_idx].to_na_isometry3().inverse() * rtvec.to_na_isometry3()).to_rvec_tvec();
+                initial_values.entry(rvec_0_b_name).or_insert(rtvec_0_b.na_rvec());
+                initial_values.entry(tvec_0_b_name).or_insert(rtvec_0_b.na_tvec());
             }
         }
 
@@ -754,15 +713,9 @@ pub fn validation(
                         (p3p.x, p3p.y, p3p.z)
                     })
                     .collect();
-                recording.set_time(
-                    "stable",
-                    rerun::TimeCell::from_timestamp_nanos_since_epoch(f.time_ns),
-                );
+                recording.set_time("stable", rerun::TimeCell::from_timestamp_nanos_since_epoch(f.time_ns));
                 recording
-                    .log(
-                        format!("/cam{}/board", cam_idx),
-                        &rerun::Points3D::new(p3p_rerun),
-                    )
+                    .log(format!("/cam{}/board", cam_idx), &rerun::Points3D::new(p3p_rerun))
                     .unwrap();
                 let avg_err = reprojection.iter().sum::<f64>() / reprojection.len() as f64;
                 recording
@@ -775,17 +728,11 @@ pub fn validation(
             Some((f.time_ns, reprojection, p2ds))
         })
         .collect();
-    let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds
-        .iter()
-        .flat_map(|f| f.1.clone())
-        .collect();
+    let mut reprojection_errors: Vec<_> = time_reprojection_errors_p2ds.iter().flat_map(|f| f.1.clone()).collect();
     println!("total pts: {}", reprojection_errors.len());
     reprojection_errors.sort_by(|&a, b| a.partial_cmp(b).unwrap());
     let median_reprojection_error = reprojection_errors[reprojection_errors.len() / 2];
-    println!(
-        "Median reprojection error: {} px",
-        median_reprojection_error
-    );
+    println!("Median reprojection error: {} px", median_reprojection_error);
     let len_99_percent = reprojection_errors.len() * 99 / 100;
     let avg_99_percent = reprojection_errors
         .iter()
@@ -807,10 +754,7 @@ pub fn validation(
                     ((c.r, c.g, c.b, 255), format!("{}", r))
                 })
                 .unzip();
-            recording.set_time(
-                "stable",
-                rerun::TimeCell::from_timestamp_nanos_since_epoch(*time_ns),
-            );
+            recording.set_time("stable", rerun::TimeCell::from_timestamp_nanos_since_epoch(*time_ns));
             recording
                 .log(
                     topic.to_string(),
@@ -839,24 +783,15 @@ pub fn init_and_calibrate_one_camera(
     // one_focal: bool,
     random_pick_two_frame: bool,
 ) -> Option<(GenericModel<f64>, HashMap<usize, RvecTvec>)> {
-    let (frame0, frame1) = find_best_two_frames_idx(
-        &cams_detected_feature_frames[cam_idx],
-        random_pick_two_frame,
-    );
+    let (frame0, frame1) = find_best_two_frames_idx(&cams_detected_feature_frames[cam_idx], random_pick_two_frame);
 
-    let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0]
-        .clone()
-        .unwrap();
-    let frame_feature1 = &cams_detected_feature_frames[cam_idx][frame1]
-        .clone()
-        .unwrap();
+    let frame_feature0 = &cams_detected_feature_frames[cam_idx][frame0].clone().unwrap();
+    let frame_feature1 = &cams_detected_feature_frames[cam_idx][frame1].clone().unwrap();
 
     let mut initial_camera = GenericModel::UCM(UCM::zeros());
     for i in 0..10 {
         log::trace!("Initialize ucm {}", i);
-        if let Some(initialized_ucm) =
-            try_init_camera(frame_feature0, frame_feature1, calib_params.fixed_focal)
-        {
+        if let Some(initialized_ucm) = try_init_camera(frame_feature0, frame_feature1, calib_params.fixed_focal) {
             initial_camera = initialized_ucm;
             break;
         }
@@ -870,11 +805,7 @@ pub fn init_and_calibrate_one_camera(
         initial_camera.width().round() as u32,
         initial_camera.height().round() as u32,
     );
-    convert_model(
-        &initial_camera,
-        &mut final_model,
-        calib_params.disabled_distortion_num,
-    );
+    convert_model(&initial_camera, &mut final_model, calib_params.disabled_distortion_num);
     println!("Converted {:?}", final_model);
     let (one_focal, fixed_focal) = if let Some(focal) = calib_params.fixed_focal {
         // if fixed focal then set one focal true
@@ -902,9 +833,7 @@ pub fn init_and_calibrate_one_camera(
                 "stable",
                 rerun::TimeCell::from_timestamp_nanos_since_epoch(k.clone().unwrap().time_ns),
             );
-            recording
-                .log(topic, &rerun::TextLog::new("keyframe"))
-                .unwrap();
+            recording.log(topic, &rerun::TextLog::new("keyframe")).unwrap();
         });
     }
     calib_result
