@@ -10,8 +10,7 @@ pub fn object_to_json<T: Serialize>(output_path: &str, object: &T) {
 }
 /// Deserializes an object from a JSON file.
 pub fn object_from_json<T: DeserializeOwned>(file_path: &str) -> T {
-    let contents =
-        std::fs::read_to_string(file_path).expect("Should have been able to read the file");
+    let contents = std::fs::read_to_string(file_path).expect("Should have been able to read the file");
     serde_json::from_str(&contents).unwrap()
 }
 
