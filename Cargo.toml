@@ -83,6 +83,10 @@ lint_groups_priority = "allow"
 [[bin]]
 name = "ccrs"
 path = "src/bin/camera_calibration.rs"
+
+[[bin]]
+name = "dataset-generator"
+path = "src/bin/dataset_generator.rs"
 test = false
 bench = false
 
