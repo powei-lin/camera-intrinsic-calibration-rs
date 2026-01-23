@@ -48,18 +48,16 @@ fn h6_l1l2_solver(six_pt_pairs: &[(glam::Vec2, glam::Vec2)]) -> Option<(f32, na:
 
     // Compute discriminant for quadratic equation
     let b_minus = -n02 * n17 + n05 * n16 + n06 * n15 - n07 * n12;
-    let bb_4ac = n02 * n02 * n17 * n17
-        - 2.0 * n02 * n05 * n16 * n17
-        - 2.0 * n02 * n06 * n15 * n17
-        - 2.0 * n02 * n07 * n12 * n17
-        + 4.0 * n02 * n07 * n15 * n16
-        + n05 * n05 * n16 * n16
-        + 4.0 * n05 * n06 * n12 * n17
-        - 2.0 * n05 * n06 * n15 * n16
-        - 2.0 * n05 * n07 * n12 * n16
-        + n06 * n06 * n15 * n15
-        - 2.0 * n06 * n07 * n12 * n15
-        + n07 * n07 * n12 * n12;
+    let bb_4ac =
+        n02 * n02 * n17 * n17 - 2.0 * n02 * n05 * n16 * n17 - 2.0 * n02 * n06 * n15 * n17 - 2.0 * n02 * n07 * n12 * n17
+            + 4.0 * n02 * n07 * n15 * n16
+            + n05 * n05 * n16 * n16
+            + 4.0 * n05 * n06 * n12 * n17
+            - 2.0 * n05 * n06 * n15 * n16
+            - 2.0 * n05 * n07 * n12 * n16
+            + n06 * n06 * n15 * n15
+            - 2.0 * n06 * n07 * n12 * n15
+            + n07 * n07 * n12 * n12;
 
     if bb_4ac < 0.0 {
         debug!("b*b - 4ac < 0.0");
@@ -186,10 +184,7 @@ fn evaluate_homography_lambda(
         let mut in_sqrt = -4.0 * lambda * r[0] * r[0] - 4.0 * lambda * r[1] * r[1] + r[2] * r[2];
         in_sqrt = in_sqrt.max(0.0);
 
-        let alpha = [
-            r[2] / 2.0 - in_sqrt.sqrt() / 2.0,
-            r[2] / 2.0 + in_sqrt.sqrt() / 2.0,
-        ];
+        let alpha = [r[2] / 2.0 - in_sqrt.sqrt() / 2.0, r[2] / 2.0 + in_sqrt.sqrt() / 2.0];
         if which_a == 2 {
             if (x_p - r[0] / alpha[0]).abs() < (x_p - r[0] / alpha[1]).abs() {
                 which_a = 0;
@@ -228,12 +223,10 @@ pub fn radial_distortion_homography(
         .features
         .iter()
         .filter_map(|(i, p0)| {
-            frame_feature1.features.get(i).map(|p1| {
-                (
-                    (p0.p2d - cxcy) / half_img_size,
-                    (p1.p2d - cxcy) / half_img_size,
-                )
-            })
+            frame_feature1
+                .features
+                .get(i)
+                .map(|p1| ((p0.p2d - cxcy) / half_img_size, (p1.p2d - cxcy) / half_img_size))
         })
         .collect();
     let ransac_times = 1000;

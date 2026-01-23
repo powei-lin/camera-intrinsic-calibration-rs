@@ -38,11 +38,7 @@ pub fn rerun_shift(p2ds: &[(f32, f32)]) -> Vec<(f32, f32)> {
 /// Logs detected feature points to Rerun.
 ///
 /// Visualizes points with colors based on their IDs and 3D coordinate labels.
-pub fn log_feature_frames(
-    recording: &RecordingStream,
-    topic: &str,
-    detected_feature_frames: &[Option<FrameFeature>],
-) {
+pub fn log_feature_frames(recording: &RecordingStream, topic: &str, detected_feature_frames: &[Option<FrameFeature>]) {
     for f in detected_feature_frames {
         let ((pts, colors_labels), time_ns): ((Vec<_>, Vec<_>), i64) = if let Some(f) = f {
             (
@@ -50,10 +46,7 @@ pub fn log_feature_frames(
                     .iter()
                     .map(|(id, p)| {
                         let color = id_to_color(*id as usize);
-                        (
-                            (p.p2d.x, p.p2d.y),
-                            (color, format!("{:?}", p.p3d).to_string()),
-                        )
+                        ((p.p2d.x, p.p2d.y), (color, format!("{:?}", p.p3d).to_string()))
                     })
                     .unzip(),
                 f.time_ns,
@@ -64,10 +57,7 @@ pub fn log_feature_frames(
         let (colors, labels): (Vec<_>, Vec<_>) = colors_labels.iter().cloned().unzip();
         let pts = rerun_shift(&pts);
 
-        recording.set_time(
-            "stable",
-            rerun::TimeCell::from_timestamp_nanos_since_epoch(time_ns),
-        );
+        recording.set_time("stable", rerun::TimeCell::from_timestamp_nanos_since_epoch(time_ns));
         recording
             .log(
                 format!("{}/pts", topic),

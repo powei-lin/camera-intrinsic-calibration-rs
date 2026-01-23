@@ -37,10 +37,7 @@ impl ModelConvertFactor {
             }
         }
         let p3ds = source.unproject(&p2ds);
-        let p3ds: Vec<_> = p3ds
-            .iter()
-            .filter_map(|p| p.as_ref().map(|pp| pp.cast()))
-            .collect();
+        let p3ds: Vec<_> = p3ds.iter().filter_map(|p| p.as_ref().map(|pp| pp.cast())).collect();
         ModelConvertFactor {
             source: source.cast(),
             target: target.cast(),
@@ -86,11 +83,7 @@ pub struct UCMInitFocalAlphaFactor {
 }
 
 impl UCMInitFocalAlphaFactor {
-    pub fn new(
-        target: &GenericModel<f64>,
-        p3d: &glam::Vec3,
-        p2d: &glam::Vec2,
-    ) -> UCMInitFocalAlphaFactor {
+    pub fn new(target: &GenericModel<f64>, p3d: &glam::Vec3, p2d: &glam::Vec2) -> UCMInitFocalAlphaFactor {
         let target = target.cast();
         let p3d = na::Point3::new(p3d.x, p3d.y, p3d.z).cast();
         let p2d = na::Vector2::new(p2d.x, p2d.y).cast();
@@ -247,16 +240,8 @@ impl SE3Factor {
 
 impl<T: na::RealField> Factor<T> for SE3Factor {
     fn residual_func(&self, params: &[nalgebra::DVector<T>]) -> nalgebra::DVector<T> {
-        let rvec = na::Vector3::new(
-            params[0][0].clone(),
-            params[0][1].clone(),
-            params[0][2].clone(),
-        );
-        let tvec = na::Vector3::new(
-            params[1][0].clone(),
-            params[1][1].clone(),
-            params[1][2].clone(),
-        );
+        let rvec = na::Vector3::new(params[0][0].clone(), params[0][1].clone(), params[0][2].clone());
+        let tvec = na::Vector3::new(params[1][0].clone(), params[1][1].clone(), params[1][2].clone());
         let t_i_0 = na::Isometry3::new(tvec, rvec);
         let t_diff = self.t_i_b.cast().inverse() * t_i_0 * self.t_0_b.cast();
         let r_diff = t_diff.rotation.scaled_axis();
