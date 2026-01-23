@@ -583,10 +583,14 @@ pub fn validate_extrinsics(
                     find_relative_pose(rt_i, rt_j),
                     find_relative_pose(rt_j, rt_i),
                 ) {
-                    let error = pose_difference(&rt_i_j_expected, &measured_i_j);
+                    let measured_i_j_iso = measured_i_j.to_na_isometry3();
+                    let measured_j_i_iso = measured_j_i.to_na_isometry3();
+
+                    let error = pose_difference(&rt_i_j_expected, &measured_i_j_iso);
                     validation_errors.push((i, j, error));
 
-                    let error_inv = pose_difference(&rt_i_j_expected.inverse(), &measured_j_i);
+                    let error_inv =
+                        pose_difference(&rt_i_j_expected.inverse(), &measured_j_i_iso);
                     validation_errors.push((j, i, error_inv));
                 }
             }
