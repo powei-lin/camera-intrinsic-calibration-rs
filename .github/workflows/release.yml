@@ -24,11 +24,15 @@ jobs:
         run: cargo build --release --verbose
       - name: Run Tests
         run: cargo test --verbose --all-targets --all-features --workspace
+      - name: Generate Changelog
+        run: |
+          cargo install git-cliff
+          git-cliff --latest --strip header > release_notes.md
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: target/release/ccrs
-          generate_release_notes: true
+          body_path: release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Python Wheels

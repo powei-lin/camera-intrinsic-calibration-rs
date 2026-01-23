@@ -6,6 +6,8 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/camera-intrinsic-calibration.svg)](https://pypi.org/project/camera-intrinsic-calibration)
 
+[![codecov](https://codecov.io/gh/powei-lin/camera-intrinsic-calibration-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/powei-lin/camera-intrinsic-calibration-rs)
+
 A pure rust camera intrinsic calibration tool.
 
 ## Installation
