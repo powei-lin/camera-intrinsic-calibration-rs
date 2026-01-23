@@ -14,7 +14,10 @@ fn main() {
     let params = na::dvector![471.019, 470.243, 367.122, 246.741, 0.67485];
     let model = GenericModel::UCM(UCM::new(&params, 752, 480));
 
-    let img = ImageReader::open("data/euroc.png").unwrap().decode().unwrap();
+    let img = ImageReader::open("data/euroc.png")
+        .unwrap()
+        .decode()
+        .unwrap();
     let board = create_default_6x6_board();
 
     let detector = TagDetector::new(&aprilgrid::TagFamily::T36H11, None);
@@ -38,7 +41,12 @@ fn main() {
         .collect();
     let (p3ds, p2ds): (Vec<_>, Vec<_>) = tags_expand_ids
         .iter()
-        .map(|p| (p.1.p3d, na::Vector2::new(p.1.p2d.x as f64, p.1.p2d.y as f64)))
+        .map(|p| {
+            (
+                p.1.p3d,
+                na::Vector2::new(p.1.p2d.x as f64, p.1.p2d.y as f64),
+            )
+        })
         .collect();
     let undistorted = model.unproject(&p2ds);
 
@@ -46,13 +54,17 @@ fn main() {
         .iter()
         .zip(p3ds)
         .filter_map(|(p2, p3)| {
-            p2.as_ref().map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
+            p2.as_ref()
+                .map(|p2| (p3, glam::Vec2::new(p2.x as f32, p2.y as f32)))
         })
         .unzip();
     let (r, t) = sqpnp_simple::sqpnp_solve_glam(&p3ds, &p2ds_z).unwrap();
     println!("r {:?}", r);
     println!("t {:?}", t);
-    let rt = na::Isometry3::new(na::Vector3::new(t.0, t.1, t.2), na::Vector3::new(r.0, r.1, r.2));
+    let rt = na::Isometry3::new(
+        na::Vector3::new(t.0, t.1, t.2),
+        na::Vector3::new(r.0, r.1, r.2),
+    );
 
     // println!("{}", *yy)
     p3ds.iter().zip(p2ds_z).for_each(|(p3, p2)| {

@@ -78,7 +78,9 @@ fn main() {
     let recording = rerun::RecordingStreamBuilder::new("calibration")
         .save(format!("{}/logging.rrd", output_folder))
         .unwrap();
-    recording.log_static("/", &rerun::ViewCoordinates::RDF()).unwrap();
+    recording
+        .log_static("/", &rerun::ViewCoordinates::RDF())
+        .unwrap();
 
     let cams_detected_feature_frames = load_feature_data(&cli, &detector, &board, &recording);
 
@@ -178,10 +180,15 @@ fn load_feature_data(
     println!("detecting feature took {:.6} sec", duration_sec);
     if !cams_detected_feature_frames.is_empty() {
         println!("total: {} images", cams_detected_feature_frames[0].len());
-        println!("avg: {} sec", duration_sec / cams_detected_feature_frames[0].len() as f64);
+        println!(
+            "avg: {} sec",
+            duration_sec / cams_detected_feature_frames[0].len() as f64
+        );
     }
 
-    cams_detected_feature_frames.iter_mut().for_each(|f| f.truncate(cli.max_images));
+    cams_detected_feature_frames
+        .iter_mut()
+        .for_each(|f| f.truncate(cli.max_images));
 
     cams_detected_feature_frames
 }
@@ -228,7 +235,10 @@ fn calibrate_all_cameras(
                 }
             }
             if calibrated_result.is_none() {
-                panic!("Failed to calibrate cam{} after {} times", cam_idx, max_trials);
+                panic!(
+                    "Failed to calibrate cam{} after {} times",
+                    cam_idx, max_trials
+                );
             }
             calibrated_result.unwrap()
         })
@@ -277,12 +287,16 @@ fn save_and_validate_results(
                 .collect();
             object_to_json(
                 &format!("{}/cam{}_poses.json", output_folder, cam_idx),
-                &new_rtvec_map.iter().collect::<BTreeMap<&usize, &RvecTvec>>(),
+                &new_rtvec_map
+                    .iter()
+                    .collect::<BTreeMap<&usize, &RvecTvec>>(),
             );
             let cam_transform =
                 na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse())
                     .with_axis_length(0.1);
-            recording.log_static(format!("/cam{}", cam_idx), &cam_transform).unwrap();
+            recording
+                .log_static(format!("/cam{}", cam_idx), &cam_transform)
+                .unwrap();
             let rep = validation(
                 cam_idx,
                 intrinsic,
@@ -299,7 +313,10 @@ fn save_and_validate_results(
         }
         write_report(&format!("{}/report.txt", output_folder), true, &rep_rms);
 
-        object_to_json(&format!("{}/extrinsics.json", output_folder), &Extrinsics::new(&t_i_0));
+        object_to_json(
+            &format!("{}/extrinsics.json", output_folder),
+            &Extrinsics::new(&t_i_0),
+        );
     } else {
         let mut rep_rms = Vec::new();
         for (cam_idx, (intrinsic, rtvec_map)) in intrinsics.iter().zip(cam_rtvecs).enumerate() {

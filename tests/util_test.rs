@@ -15,12 +15,27 @@ fn test_find_best_two_frames() {
     let make_frame = |n: usize| -> FrameFeature {
         let mut features = HashMap::new();
         for i in 0..n {
-            features.insert(i as u32, FeaturePoint { p2d: Vec2::ZERO, p3d: glam::Vec3::ZERO });
+            features.insert(
+                i as u32,
+                FeaturePoint {
+                    p2d: Vec2::ZERO,
+                    p3d: glam::Vec3::ZERO,
+                },
+            );
         }
-        FrameFeature { time_ns: 0, img_w_h: (100, 100), features }
+        FrameFeature {
+            time_ns: 0,
+            img_w_h: (100, 100),
+            features,
+        }
     };
 
-    let frames = vec![Some(make_frame(10)), Some(make_frame(100)), Some(make_frame(50)), None];
+    let frames = vec![
+        Some(make_frame(10)),
+        Some(make_frame(100)),
+        Some(make_frame(50)),
+        None,
+    ];
 
     let (idx1, idx2) = find_best_two_frames_idx(&frames, false);
 

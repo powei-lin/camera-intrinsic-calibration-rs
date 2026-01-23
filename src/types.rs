@@ -18,7 +18,10 @@ pub struct RvecTvec {
 
 impl RvecTvec {
     pub fn new(rvec: &na::DVector<f64>, tvec: &na::DVector<f64>) -> RvecTvec {
-        RvecTvec { rvec: (rvec[0], rvec[1], rvec[2]), tvec: (tvec[0], tvec[1], tvec[2]) }
+        RvecTvec {
+            rvec: (rvec[0], rvec[1], rvec[2]),
+            tvec: (tvec[0], tvec[1], tvec[2]),
+        }
     }
     /// Converts to nalgebra `Isometry3`.
     pub fn to_na_isometry3(&self) -> na::Isometry3<f64> {
@@ -42,7 +45,9 @@ pub struct Extrinsics {
 
 impl Extrinsics {
     pub fn new(rtvecs: &[RvecTvec]) -> Extrinsics {
-        Extrinsics { rtvecs: rtvecs.to_vec() }
+        Extrinsics {
+            rtvecs: rtvecs.to_vec(),
+        }
     }
 }
 

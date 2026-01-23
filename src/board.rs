@@ -14,7 +14,13 @@ pub struct BoardConfig {
 
 impl Default for BoardConfig {
     fn default() -> Self {
-        Self { tag_size_meter: 0.088, tag_spacing: 0.3, tag_rows: 6, tag_cols: 6, first_id: 0 }
+        Self {
+            tag_size_meter: 0.088,
+            tag_spacing: 0.3,
+            tag_rows: 6,
+            tag_cols: 6,
+            first_id: 0,
+        }
     }
 }
 
@@ -50,18 +56,37 @@ impl Board {
             for c in 0..tag_cols {
                 let start_x = (c as f32) * tag_size_meter * (1.0 + tag_spacing);
                 let start_y = -(r as f32) * tag_size_meter * (1.0 + tag_spacing);
-                id_to_3d.insert(count_id, glam::Vec3 { x: start_x, y: start_y, z: 0.0 });
+                id_to_3d.insert(
+                    count_id,
+                    glam::Vec3 {
+                        x: start_x,
+                        y: start_y,
+                        z: 0.0,
+                    },
+                );
                 id_to_3d.insert(
                     count_id + 1,
-                    glam::Vec3 { x: start_x + tag_size_meter, y: start_y, z: 0.0 },
+                    glam::Vec3 {
+                        x: start_x + tag_size_meter,
+                        y: start_y,
+                        z: 0.0,
+                    },
                 );
                 id_to_3d.insert(
                     count_id + 2,
-                    glam::Vec3 { x: start_x + tag_size_meter, y: start_y - tag_size_meter, z: 0.0 },
+                    glam::Vec3 {
+                        x: start_x + tag_size_meter,
+                        y: start_y - tag_size_meter,
+                        z: 0.0,
+                    },
                 );
                 id_to_3d.insert(
                     count_id + 3,
-                    glam::Vec3 { x: start_x, y: start_y - tag_size_meter, z: 0.0 },
+                    glam::Vec3 {
+                        x: start_x,
+                        y: start_y - tag_size_meter,
+                        z: 0.0,
+                    },
                 );
                 count_id += 4;
             }

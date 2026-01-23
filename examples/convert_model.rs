@@ -5,7 +5,10 @@ use nalgebra as na;
 
 fn main() {
     env_logger::init();
-    let img = ImageReader::open("data/tum_vi_with_chart.png").unwrap().decode().unwrap();
+    let img = ImageReader::open("data/tum_vi_with_chart.png")
+        .unwrap()
+        .decode()
+        .unwrap();
     let img = image::DynamicImage::ImageLuma8(img.to_luma8());
     let source_model = model_from_json("data/eucm.json");
     // let mut target_model = GenericModel::KannalaBrandt4(KannalaBrandt4::new(

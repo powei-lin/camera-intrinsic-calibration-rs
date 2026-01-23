@@ -20,7 +20,12 @@ pub fn log_image(recording: &RecordingStream, topic: &str, img: &DynamicImage) {
 pub fn id_to_color(id: usize) -> (u8, u8, u8, u8) {
     let mut rng = ChaCha8Rng::seed_from_u64(id as u64);
     let color_num = rng.random_range(0..2u32.pow(24));
-    (((color_num >> 16) % 256) as u8, ((color_num >> 8) % 256) as u8, (color_num % 256) as u8, 255)
+    (
+        ((color_num >> 16) % 256) as u8,
+        ((color_num >> 8) % 256) as u8,
+        (color_num % 256) as u8,
+        255,
+    )
 }
 
 /// Shifts 2D points by 0.5 for Rerun visualization.
@@ -45,7 +50,10 @@ pub fn log_feature_frames(
                     .iter()
                     .map(|(id, p)| {
                         let color = id_to_color(*id as usize);
-                        ((p.p2d.x, p.p2d.y), (color, format!("{:?}", p.p3d).to_string()))
+                        (
+                            (p.p2d.x, p.p2d.y),
+                            (color, format!("{:?}", p.p3d).to_string()),
+                        )
                     })
                     .unzip(),
                 f.time_ns,
@@ -56,7 +64,10 @@ pub fn log_feature_frames(
         let (colors, labels): (Vec<_>, Vec<_>) = colors_labels.iter().cloned().unzip();
         let pts = rerun_shift(&pts);
 
-        recording.set_time("stable", rerun::TimeCell::from_timestamp_nanos_since_epoch(time_ns));
+        recording.set_time(
+            "stable",
+            rerun::TimeCell::from_timestamp_nanos_since_epoch(time_ns),
+        );
         recording
             .log(
                 format!("{}/pts", topic),
