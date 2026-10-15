@@ -35,9 +35,9 @@ ccrs dataset-calib-cam1_1024_16 --model eucm
 ### Visualize details after calibration
 ```sh
 # use cargo to install rerun
-cargo install rerun-cli --version 0.27.2
+cargo install rerun-cli --version 0.38.1
 # or use pip to install rerun
-pip install rerun-sdk==0.27.2
+pip install rerun-sdk==0.38.1
 # visualize result
 rerun results/20YYMMDD_HH_MM_SS/logging.rrd
 ```
