@@ -1,6 +1,7 @@
 use camera_intrinsic_model::GenericModel;
-use nalgebra as na;
 use serde::{Deserialize, Serialize};
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 /// Calibration parameters configuration.
 pub struct CalibParams {

@@ -4,9 +4,10 @@ use camera_intrinsic_calibration::optimization::{
 };
 use camera_intrinsic_model::{GenericModel, UCM};
 use glam::{Vec2, Vec3};
-use nalgebra as na;
 use std::collections::HashMap;
 use tiny_solver::factors::Factor;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 #[test]
 fn test_homography_to_focal_general() {
@@ -82,11 +83,12 @@ fn test_reprojection_factor() {
 #[test]
 fn test_init_pose() {
     // Construct 3D points in a known configuration
-    let mut points_3d = Vec::new();
-    points_3d.push(Vec3::new(0.0, 0.0, 0.0));
-    points_3d.push(Vec3::new(1.0, 0.0, 0.0));
-    points_3d.push(Vec3::new(0.0, 1.0, 0.0));
-    points_3d.push(Vec3::new(1.0, 1.0, 0.0));
+    let points_3d = [
+        Vec3::new(0.0, 0.0, 0.0),
+        Vec3::new(1.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0),
+        Vec3::new(1.0, 1.0, 0.0),
+    ];
 
     // Construct a known pose (Identity)
     // Camera at origin, looking down +Z (or depending on convention).

@@ -1,8 +1,10 @@
 use crate::types::DVecVec3;
 
 use camera_intrinsic_model::*;
-use nalgebra as na;
+// use nalgebra as na;
 use tiny_solver::factors::Factor;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 /// Factor for converting one camera model to another by minimizing reprojection error of a dense grid.
 ///
@@ -53,7 +55,7 @@ impl ModelConvertFactor {
 }
 
 impl<T: na::RealField> Factor<T> for ModelConvertFactor {
-    fn residual_func(&self, params: &[nalgebra::DVector<T>]) -> nalgebra::DVector<T> {
+    fn residual_func(&self, params: &[na::DVector<T>]) -> na::DVector<T> {
         let model = self.target.cast::<T>().new_from_params(&params[0]);
         let p3d_template: Vec<_> = self.p3ds.iter().map(|&p| p.cast::<T>()).collect();
         let p2ds0 = self.source.cast::<T>().project(&p3d_template);
@@ -98,7 +100,7 @@ impl UCMInitFocalAlphaFactor {
     }
 }
 impl<T: na::RealField> Factor<T> for UCMInitFocalAlphaFactor {
-    fn residual_func(&self, params: &[nalgebra::DVector<T>]) -> nalgebra::DVector<T> {
+    fn residual_func(&self, params: &[na::DVector<T>]) -> na::DVector<T> {
         // params[[f, alpha], rvec, tvec]
         let mut cam_params = self.target.cast::<T>().params();
         cam_params[0] = params[0][0].clone();

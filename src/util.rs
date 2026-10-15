@@ -10,11 +10,12 @@ use super::optimization::factors::*;
 use super::types::Vec3DVec;
 use camera_intrinsic_model::*;
 use log::debug;
-use nalgebra as na;
 use rand::seq::SliceRandom;
 use rerun::RecordingStream;
 use tiny_solver::Optimizer;
 use tiny_solver::loss_functions::HuberLoss;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 /// Converts an `RvecTvec` tuple representation to nalgebra vectors.
 pub fn rtvec_to_na_dvec(

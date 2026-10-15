@@ -34,5 +34,5 @@ strip = true
 
 [project.optional-dependencies]
 rerun = [
-  "rerun-sdk==0.27.3",
+  "rerun-sdk==0.38.1",
 ]

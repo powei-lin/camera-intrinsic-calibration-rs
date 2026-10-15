@@ -1,5 +1,6 @@
 use camera_intrinsic_calibration::types::{RvecTvec, ToRvecTvec};
-use nalgebra as na;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 #[test]
 fn test_rvec_tvec_conversion() {
