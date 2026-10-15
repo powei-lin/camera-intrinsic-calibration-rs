@@ -1,7 +1,8 @@
 use camera_intrinsic_calibration::util::convert_model;
 use camera_intrinsic_model::*;
 use image::ImageReader;
-use nalgebra as na;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 fn main() {
     env_logger::init();

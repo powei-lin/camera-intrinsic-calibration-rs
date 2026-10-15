@@ -2,8 +2,9 @@ use camera_intrinsic_calibration::detected_points::{FeaturePoint, FrameFeature};
 use camera_intrinsic_calibration::util::{convert_model, find_best_two_frames_idx};
 use camera_intrinsic_model::{EUCM, GenericModel, UCM};
 use glam::Vec2;
-use nalgebra as na;
 use std::collections::HashMap;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 #[test]
 fn test_find_best_two_frames() {

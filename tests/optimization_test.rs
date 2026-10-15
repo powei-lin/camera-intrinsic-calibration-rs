@@ -4,9 +4,10 @@ use camera_intrinsic_calibration::optimization::{
 };
 use camera_intrinsic_model::{GenericModel, UCM};
 use glam::{Vec2, Vec3};
-use nalgebra as na;
 use std::collections::HashMap;
 use tiny_solver::factors::Factor;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 #[test]
 fn test_homography_to_focal_general() {

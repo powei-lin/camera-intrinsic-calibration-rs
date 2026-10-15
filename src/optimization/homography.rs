@@ -1,7 +1,7 @@
 use faer::linalg::solvers::SolveLstsqCore;
 use log::debug;
-use nalgebra as na;
 use rand::seq::SliceRandom;
+use tiny_solver::na;
 
 use crate::detected_points::FrameFeature;
 

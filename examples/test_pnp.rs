@@ -7,7 +7,8 @@ use camera_intrinsic_calibration::{
 use camera_intrinsic_model::*;
 use glam::Vec2;
 use image::ImageReader;
-use nalgebra as na;
+use tiny_solver::na;
+use tiny_solver::na as nalgebra;
 
 fn main() {
     env_logger::init();
