@@ -11,6 +11,7 @@ use camera_intrinsic_calibration::visualization::*;
 use camera_intrinsic_model::*;
 use clap::{Parser, ValueEnum};
 use log::trace;
+use rerun::AsComponents;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -292,10 +293,13 @@ fn save_and_validate_results(
                     .collect::<BTreeMap<&usize, &RvecTvec>>(),
             );
             let cam_transform =
-                na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse())
-                    .with_axis_length(0.1);
+                na_isometry3_to_rerun_transform3d(&t_i_0[cam_idx].to_na_isometry3().inverse());
+            let cam_transform_axis = rerun::TransformAxes3D::new(0.1);
             recording
-                .log_static(format!("/cam{}", cam_idx), &cam_transform)
+                .log_static(
+                    format!("/cam{}", cam_idx),
+                    &[&cam_transform as &dyn AsComponents, &cam_transform_axis],
+                )
                 .unwrap();
             let rep = validation(
                 cam_idx,
