@@ -137,7 +137,7 @@ pub fn load_euroc(
                     )
                 })
                 .collect();
-            time_frame.sort_by(|a, b| a.0.cmp(&b.0));
+            time_frame.sort_by_key(|frame| frame.0);
             time_frame.iter().map(|f| f.1.clone()).collect()
         })
         .collect()
@@ -207,7 +207,7 @@ pub fn load_others(
                     )
                 })
                 .collect();
-            time_frame.sort_by(|a, b| a.0.cmp(&b.0));
+            time_frame.sort_by_key(|frame| frame.0);
             time_frame.iter().map(|f| f.1.clone()).collect()
         })
         .collect()
